@@ -1,0 +1,26 @@
+package handler
+
+import (
+	"github.com/gin-gonic/gin"
+
+	"colink-server/internal/pkg"
+	"colink-server/internal/service"
+)
+
+type MeHandler struct {
+	authService *service.AuthService
+}
+
+func NewMeHandler(authService *service.AuthService) *MeHandler {
+	return &MeHandler{authService: authService}
+}
+
+func (h *MeHandler) Get(c *gin.Context) {
+	result, err := h.authService.Me(userIDFromContext(c))
+	if err != nil {
+		pkg.Error(c, err)
+		return
+	}
+
+	pkg.Success(c, result)
+}

@@ -1,0 +1,21 @@
+# Repository defaults only.
+# Put local secrets and machine-specific overrides in config.local.yaml or env vars.
+server:
+  port: 8080
+  mode: debug
+
+database:
+  host: localhost
+  port: 5432
+  user: colink
+  password: colink_dev
+  dbname: colink
+  sslmode: disable
+
+jwt:
+  secret: change-me-in-production
+  access_ttl: 15m
+  refresh_ttl: 720h
+
+ws:
+  ticket_ttl: 30s

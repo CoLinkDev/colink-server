@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: colink
+      POSTGRES_PASSWORD: colink_dev
+      POSTGRES_DB: colink
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  # Uncomment when you want to run the Go server inside Docker.
+  # server:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   depends_on:
+  #     - postgres
+  #   ports:
+  #     - "8080:8080"
+  #   environment:
+  #     SERVER_MODE: release
+  #     SERVER_PORT: 8080
+  #     DATABASE_HOST: postgres
+  #     DATABASE_PORT: 5432
+  #     DATABASE_USER: colink
+  #     DATABASE_PASSWORD: colink_dev
+  #     DATABASE_DBNAME: colink
+  #     DATABASE_SSLMODE: disable
+  #     JWT_SECRET: change-me-in-production
+  #     JWT_ACCESS_TTL: 15m
+  #     JWT_REFRESH_TTL: 720h
+  #     WS_TICKET_TTL: 30s
+
+volumes:
+  pgdata:
