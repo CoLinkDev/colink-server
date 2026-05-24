@@ -1,4 +1,4 @@
-ALTER TABLE users ADD COLUMN username VARCHAR(255) NOT NULL DEFAULT '';
-UPDATE users SET username = email;
-ALTER TABLE users ALTER COLUMN username DROP DEFAULT;
-CREATE UNIQUE INDEX idx_users_username ON users(username);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(255);
+UPDATE users SET username = email WHERE username IS NULL OR username = '';
+ALTER TABLE users ALTER COLUMN username SET NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username);
