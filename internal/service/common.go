@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"net/http"
 	"net/mail"
+	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
@@ -19,6 +20,8 @@ var deviceTypes = map[string]struct{}{
 	"ios":     {},
 }
 
+var usernamePattern = regexp.MustCompile(`^[A-Za-z0-9_.@-]+$`)
+
 func parseUUID(value string) (uuid.UUID, error) {
 	id, err := uuid.Parse(value)
 	if err != nil {
@@ -32,6 +35,10 @@ func normalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
 }
 
+func normalizeUsername(username string) string {
+	return strings.TrimSpace(username)
+}
+
 func validateEmail(email string) bool {
 	parsed, err := mail.ParseAddress(email)
 	if err != nil {
@@ -39,6 +46,17 @@ func validateEmail(email string) bool {
 	}
 
 	return parsed.Address == email
+}
+
+func validateUsername(username string) error {
+	if length := len(username); length < 3 || length > 255 {
+		return pkg.NewAppError(http.StatusBadRequest, pkg.CodeInvalidUsername, "invalid username")
+	}
+	if !usernamePattern.MatchString(username) {
+		return pkg.NewAppError(http.StatusBadRequest, pkg.CodeInvalidUsername, "invalid username")
+	}
+
+	return nil
 }
 
 func validatePassword(password string) error {

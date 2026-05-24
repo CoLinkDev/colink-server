@@ -18,13 +18,14 @@ func NewAuthHandler(authService *service.AuthService) *AuthHandler {
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req struct {
 		Email    string `json:"email" binding:"required"`
+		Username string `json:"username" binding:"required"`
 		Password string `json:"password" binding:"required"`
 	}
 	if !bindJSON(c, &req) {
 		return
 	}
 
-	result, err := h.authService.Register(req.Email, req.Password)
+	result, err := h.authService.Register(req.Email, req.Username, req.Password)
 	if err != nil {
 		pkg.Error(c, err)
 		return
@@ -35,14 +36,14 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req struct {
-		Email    string `json:"email" binding:"required"`
-		Password string `json:"password" binding:"required"`
+		Identifier string `json:"identifier" binding:"required"`
+		Password   string `json:"password" binding:"required"`
 	}
 	if !bindJSON(c, &req) {
 		return
 	}
 
-	result, err := h.authService.Login(req.Email, req.Password)
+	result, err := h.authService.Login(req.Identifier, req.Password)
 	if err != nil {
 		pkg.Error(c, err)
 		return

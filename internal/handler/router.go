@@ -52,6 +52,7 @@ func NewRouter(cfg *config.Config, db *gorm.DB, log *zap.Logger) *gin.Engine {
 	auth.POST("/change-password", authMiddleware.RequireAuth(), authHandler.ChangePassword)
 
 	v1.GET("/me", authMiddleware.RequireAuth(), meHandler.Get)
+	v1.PUT("/me/username", authMiddleware.RequireAuth(), meHandler.UpdateUsername)
 
 	devices := v1.Group("/devices")
 	devices.Use(authMiddleware.RequireAuth())

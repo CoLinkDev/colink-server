@@ -32,6 +32,15 @@ func (r *UserRepository) FindByEmail(email string) (*model.User, error) {
 	return &user, nil
 }
 
+func (r *UserRepository) FindByUsername(username string) (*model.User, error) {
+	var user model.User
+	if err := r.db.Where("username = ?", username).First(&user).Error; err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}
+
 func (r *UserRepository) FindByID(userID uuid.UUID) (*model.User, error) {
 	var user model.User
 	if err := r.db.First(&user, "id = ?", userID).Error; err != nil {
@@ -45,5 +54,12 @@ func (r *UserRepository) UpdatePassword(userID uuid.UUID, passwordHash string) e
 	return r.db.Model(&model.User{}).
 		Where("id = ?", userID).
 		Updates(map[string]any{"password_hash": passwordHash}).
+		Error
+}
+
+func (r *UserRepository) UpdateUsername(userID uuid.UUID, username string) error {
+	return r.db.Model(&model.User{}).
+		Where("id = ?", userID).
+		Updates(map[string]any{"username": username}).
 		Error
 }

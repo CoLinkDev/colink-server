@@ -24,3 +24,19 @@ func (h *MeHandler) Get(c *gin.Context) {
 
 	pkg.Success(c, result)
 }
+
+func (h *MeHandler) UpdateUsername(c *gin.Context) {
+	var req struct {
+		Username string `json:"username" binding:"required"`
+	}
+	if !bindJSON(c, &req) {
+		return
+	}
+
+	if err := h.authService.UpdateUsername(userIDFromContext(c), req.Username); err != nil {
+		pkg.Error(c, err)
+		return
+	}
+
+	pkg.Success(c, nil)
+}

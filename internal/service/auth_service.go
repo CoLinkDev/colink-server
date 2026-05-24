@@ -28,6 +28,7 @@ type RefreshResult struct {
 type MeResult struct {
 	UserID    string    `json:"userId"`
 	Email     string    `json:"email"`
+	Username  string    `json:"username"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 
@@ -58,10 +59,14 @@ func NewAuthService(
 	}
 }
 
-func (s *AuthService) Register(email string, password string) (*AuthResult, error) {
+func (s *AuthService) Register(email string, username string, password string) (*AuthResult, error) {
 	email = normalizeEmail(email)
+	username = normalizeUsername(username)
 	if !validateEmail(email) {
 		return nil, pkg.NewAppError(http.StatusBadRequest, pkg.CodeInvalidEmailFormat, "invalid email format")
+	}
+	if err := validateUsername(username); err != nil {
+		return nil, err
 	}
 	if err := validatePassword(password); err != nil {
 		return nil, err
@@ -79,11 +84,12 @@ func (s *AuthService) Register(email string, password string) (*AuthResult, erro
 
 		user := &model.User{
 			Email:        email,
+			Username:     username,
 			PasswordHash: passwordHash,
 		}
 		if err := userRepo.Create(user); err != nil {
-			if isUniqueViolation(err) {
-				return pkg.NewAppError(http.StatusConflict, pkg.CodeEmailAlreadyExists, "email already exists")
+			if appErr := mapUserUniqueViolation(err); appErr != nil {
+				return appErr
 			}
 			return pkg.InternalError(err)
 		}
@@ -107,15 +113,10 @@ func (s *AuthService) Register(email string, password string) (*AuthResult, erro
 	return &result, nil
 }
 
-func (s *AuthService) Login(email string, password string) (*AuthResult, error) {
-	email = normalizeEmail(email)
-
-	user, err := s.userRepo.FindByEmail(email)
+func (s *AuthService) Login(identifier string, password string) (*AuthResult, error) {
+	user, err := s.findUserByIdentifier(identifier)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, pkg.NewAppError(http.StatusUnauthorized, pkg.CodeInvalidCredentials, "invalid credentials")
-		}
-		return nil, pkg.InternalError(err)
+		return nil, err
 	}
 	if user.Disabled {
 		return nil, pkg.NewAppError(http.StatusForbidden, pkg.CodeAccountDisabled, "account disabled")
@@ -242,6 +243,38 @@ func (s *AuthService) ChangePassword(userID string, oldPassword string, newPassw
 	})
 }
 
+func (s *AuthService) UpdateUsername(userID string, username string) error {
+	username = normalizeUsername(username)
+	if err := validateUsername(username); err != nil {
+		return err
+	}
+
+	userUUID, err := parseUUID(userID)
+	if err != nil {
+		return err
+	}
+
+	user, err := s.userRepo.FindByID(userUUID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return pkg.NewAppError(http.StatusUnauthorized, pkg.CodeUnauthorized, "unauthorized")
+		}
+		return pkg.InternalError(err)
+	}
+	if user.Username == username {
+		return nil
+	}
+
+	if err := s.userRepo.UpdateUsername(userUUID, username); err != nil {
+		if appErr := mapUserUniqueViolation(err); appErr != nil {
+			return appErr
+		}
+		return pkg.InternalError(err)
+	}
+
+	return nil
+}
+
 func (s *AuthService) Me(userID string) (*MeResult, error) {
 	userUUID, err := parseUUID(userID)
 	if err != nil {
@@ -259,8 +292,33 @@ func (s *AuthService) Me(userID string) (*MeResult, error) {
 	return &MeResult{
 		UserID:    user.ID.String(),
 		Email:     user.Email,
+		Username:  user.Username,
 		CreatedAt: user.CreatedAt,
 	}, nil
+}
+
+func (s *AuthService) findUserByIdentifier(identifier string) (*model.User, error) {
+	email := normalizeEmail(identifier)
+	if validateEmail(email) {
+		user, err := s.userRepo.FindByEmail(email)
+		if err == nil {
+			return user, nil
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, pkg.InternalError(err)
+		}
+	}
+
+	username := normalizeUsername(identifier)
+	user, err := s.userRepo.FindByUsername(username)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, pkg.NewAppError(http.StatusUnauthorized, pkg.CodeInvalidCredentials, "invalid credentials")
+		}
+		return nil, pkg.InternalError(err)
+	}
+
+	return user, nil
 }
 
 type issuedSession struct {
@@ -301,4 +359,24 @@ func (s *AuthService) issueSession(tokenRepo *repository.TokenRepository, userID
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
+
+func mapUserUniqueViolation(err error) *pkg.AppError {
+	if !isUniqueViolation(err) {
+		return nil
+	}
+
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return nil
+	}
+
+	switch pgErr.ConstraintName {
+	case "idx_users_email":
+		return pkg.NewAppError(http.StatusConflict, pkg.CodeEmailAlreadyExists, "email already exists")
+	case "idx_users_username":
+		return pkg.NewAppError(http.StatusConflict, pkg.CodeUsernameAlreadyExists, "username already exists")
+	default:
+		return nil
+	}
 }

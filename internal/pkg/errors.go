@@ -9,13 +9,15 @@ const (
 	CodeInvalidRequestBody = 4001
 	CodeInvalidParameter   = 4002
 
-	CodeEmailAlreadyExists  = 1001
-	CodeInvalidEmailFormat  = 1002
-	CodePasswordTooShort    = 1003
-	CodeInvalidCredentials  = 1010
-	CodeAccountDisabled     = 1011
-	CodeInvalidRefreshToken = 1020
-	CodeRefreshTokenRevoked = 1021
+	CodeEmailAlreadyExists    = 1001
+	CodeInvalidEmailFormat    = 1002
+	CodePasswordTooShort      = 1003
+	CodeUsernameAlreadyExists = 1004
+	CodeInvalidUsername       = 1005
+	CodeInvalidCredentials    = 1010
+	CodeAccountDisabled       = 1011
+	CodeInvalidRefreshToken   = 1020
+	CodeRefreshTokenRevoked   = 1021
 
 	CodeDeviceLimitReached = 2001
 	CodeInvalidDeviceType  = 2002
