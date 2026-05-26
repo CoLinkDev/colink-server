@@ -1,12 +1,9 @@
 package service
 
 import (
-	"errors"
 	"net/http"
 	"strings"
 	"time"
-
-	"gorm.io/gorm"
 
 	"colink-server/internal/model"
 	"colink-server/internal/pkg"
@@ -128,7 +125,7 @@ func (s *DeviceService) UpdateName(userID string, deviceID string, name *string)
 		return err
 	}
 
-	device, err := s.EnsureOwnedDevice(userID, deviceID)
+	device, err := ensureOwnedDevice(s.deviceRepo, userID, deviceID)
 	if err != nil {
 		return err
 	}
@@ -141,7 +138,7 @@ func (s *DeviceService) UpdateName(userID string, deviceID string, name *string)
 }
 
 func (s *DeviceService) Delete(userID string, deviceID string) error {
-	device, err := s.EnsureOwnedDevice(userID, deviceID)
+	device, err := ensureOwnedDevice(s.deviceRepo, userID, deviceID)
 	if err != nil {
 		return err
 	}
@@ -159,7 +156,7 @@ func (s *DeviceService) RotateKey(userID string, deviceID string, publicKey stri
 		return err
 	}
 
-	device, err := s.EnsureOwnedDevice(userID, deviceID)
+	device, err := ensureOwnedDevice(s.deviceRepo, userID, deviceID)
 	if err != nil {
 		return err
 	}
@@ -169,26 +166,4 @@ func (s *DeviceService) RotateKey(userID string, deviceID string, publicKey stri
 	}
 
 	return nil
-}
-
-func (s *DeviceService) EnsureOwnedDevice(userID string, deviceID string) (*model.Device, error) {
-	userUUID, err := parseUUID(userID)
-	if err != nil {
-		return nil, err
-	}
-
-	deviceUUID, err := parseUUID(deviceID)
-	if err != nil {
-		return nil, err
-	}
-
-	device, err := s.deviceRepo.FindByIDAndUserID(deviceUUID, userUUID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, pkg.NewAppError(http.StatusNotFound, pkg.CodeDeviceNotFound, "device not found")
-		}
-		return nil, pkg.InternalError(err)
-	}
-
-	return device, nil
 }

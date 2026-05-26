@@ -2,14 +2,18 @@ package service
 
 import (
 	"encoding/base64"
+	"errors"
 	"net/http"
 	"net/mail"
 	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 
+	"colink-server/internal/model"
 	"colink-server/internal/pkg"
+	"colink-server/internal/repository"
 )
 
 var deviceTypes = map[string]struct{}{
@@ -97,4 +101,26 @@ func validatePublicKey(publicKey string) error {
 	}
 
 	return pkg.NewAppError(http.StatusBadRequest, pkg.CodeInvalidDeviceKey, "invalid key")
+}
+
+func ensureOwnedDevice(deviceRepo *repository.DeviceRepository, userID string, deviceID string) (*model.Device, error) {
+	userUUID, err := parseUUID(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	deviceUUID, err := parseUUID(deviceID)
+	if err != nil {
+		return nil, err
+	}
+
+	device, err := deviceRepo.FindByIDAndUserID(deviceUUID, userUUID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, pkg.NewAppError(http.StatusNotFound, pkg.CodeDeviceNotFound, "device not found")
+		}
+		return nil, pkg.InternalError(err)
+	}
+
+	return device, nil
 }

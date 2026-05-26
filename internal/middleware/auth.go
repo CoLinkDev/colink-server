@@ -23,7 +23,11 @@ func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := strings.TrimSpace(c.GetHeader("Authorization"))
 		if !strings.HasPrefix(header, "Bearer ") {
-			pkg.Error(c, pkg.NewAppError(http.StatusUnauthorized, pkg.CodeUnauthorized, "unauthorized"))
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"code":    pkg.CodeUnauthorized,
+				"data":    nil,
+				"message": "unauthorized",
+			})
 			c.Abort()
 			return
 		}
@@ -31,7 +35,11 @@ func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 		token := strings.TrimSpace(strings.TrimPrefix(header, "Bearer "))
 		claims, err := pkg.ParseAccessToken(m.secret, token)
 		if err != nil || claims.UserID == "" {
-			pkg.Error(c, pkg.NewAppError(http.StatusUnauthorized, pkg.CodeUnauthorized, "unauthorized"))
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"code":    pkg.CodeUnauthorized,
+				"data":    nil,
+				"message": "unauthorized",
+			})
 			c.Abort()
 			return
 		}

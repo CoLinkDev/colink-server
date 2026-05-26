@@ -6,7 +6,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 
-	"colink-server/internal/pkg"
 	"colink-server/internal/service"
 	"colink-server/internal/ws"
 )
@@ -39,17 +38,17 @@ func (h *WsHandler) CreateTicket(c *gin.Context) {
 
 	result, err := h.wsService.IssueTicket(userIDFromContext(c), req.DeviceID)
 	if err != nil {
-		pkg.Error(c, err)
+		writeError(c, err)
 		return
 	}
 
-	pkg.Success(c, result)
+	success(c, result)
 }
 
 func (h *WsHandler) Connect(c *gin.Context) {
 	session, err := h.wsService.ConsumeTicket(c.Query("ticket"))
 	if err != nil {
-		pkg.Error(c, err)
+		writeError(c, err)
 		return
 	}
 

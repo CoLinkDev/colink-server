@@ -327,10 +327,6 @@ type issuedSession struct {
 }
 
 func (s *AuthService) issueSession(tokenRepo *repository.TokenRepository, userID uuid.UUID) (*issuedSession, error) {
-	if err := tokenRepo.DeleteExpired(time.Now().UTC()); err != nil {
-		return nil, pkg.InternalError(err)
-	}
-
 	token, err := pkg.GenerateAccessToken(s.jwtSecret, userID.String(), s.accessTTL)
 	if err != nil {
 		return nil, pkg.InternalError(err)
@@ -356,18 +352,9 @@ func (s *AuthService) issueSession(tokenRepo *repository.TokenRepository, userID
 	}, nil
 }
 
-func isUniqueViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23505"
-}
-
 func mapUserUniqueViolation(err error) *pkg.AppError {
-	if !isUniqueViolation(err) {
-		return nil
-	}
-
 	var pgErr *pgconn.PgError
-	if !errors.As(err, &pgErr) {
+	if !errors.As(err, &pgErr) || pgErr.Code != "23505" {
 		return nil
 	}
 

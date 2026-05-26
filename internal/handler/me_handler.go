@@ -3,7 +3,6 @@ package handler
 import (
 	"github.com/gin-gonic/gin"
 
-	"colink-server/internal/pkg"
 	"colink-server/internal/service"
 )
 
@@ -18,11 +17,11 @@ func NewMeHandler(authService *service.AuthService) *MeHandler {
 func (h *MeHandler) Get(c *gin.Context) {
 	result, err := h.authService.Me(userIDFromContext(c))
 	if err != nil {
-		pkg.Error(c, err)
+		writeError(c, err)
 		return
 	}
 
-	pkg.Success(c, result)
+	success(c, result)
 }
 
 func (h *MeHandler) UpdateUsername(c *gin.Context) {
@@ -34,9 +33,9 @@ func (h *MeHandler) UpdateUsername(c *gin.Context) {
 	}
 
 	if err := h.authService.UpdateUsername(userIDFromContext(c), req.Username); err != nil {
-		pkg.Error(c, err)
+		writeError(c, err)
 		return
 	}
 
-	pkg.Success(c, nil)
+	success(c, nil)
 }

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 
 	"colink-server/internal/model"
@@ -52,7 +53,7 @@ func NewWsService(
 }
 
 func (s *WsService) IssueTicket(userID string, deviceID string) (*TicketResult, error) {
-	device, err := s.ensureOwnedDevice(userID, deviceID)
+	device, err := ensureOwnedDevice(s.deviceRepo, userID, deviceID)
 	if err != nil {
 		return nil, err
 	}
@@ -60,9 +61,6 @@ func (s *WsService) IssueTicket(userID string, deviceID string) (*TicketResult, 
 	now := time.Now().UTC()
 	if !s.allowTicketIssue(userID, now) {
 		return nil, pkg.NewAppError(http.StatusTooManyRequests, pkg.CodeRateLimited, "rate limited")
-	}
-	if err := s.ticketRepo.Cleanup(now); err != nil {
-		return nil, pkg.InternalError(err)
 	}
 
 	ticketValue, err := pkg.GenerateOpaqueToken(48)
@@ -145,28 +143,6 @@ func (s *WsService) HandleMessage(client *ws.Client, message ws.ClientMessage) {
 	}
 }
 
-func (s *WsService) ensureOwnedDevice(userID string, deviceID string) (*model.Device, error) {
-	userUUID, err := parseUUID(userID)
-	if err != nil {
-		return nil, err
-	}
-
-	deviceUUID, err := parseUUID(deviceID)
-	if err != nil {
-		return nil, err
-	}
-
-	device, err := s.deviceRepo.FindByIDAndUserID(deviceUUID, userUUID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, pkg.NewAppError(http.StatusNotFound, pkg.CodeDeviceNotFound, "device not found")
-		}
-		return nil, pkg.InternalError(err)
-	}
-
-	return device, nil
-}
-
 func (s *WsService) allowTicketIssue(userID string, now time.Time) bool {
 	s.ticketLimitMu.Lock()
 	defer s.ticketLimitMu.Unlock()
@@ -178,6 +154,9 @@ func (s *WsService) allowTicketIssue(userID string, now time.Time) bool {
 		if item.After(windowStart) {
 			filtered = append(filtered, item)
 		}
+	}
+	if len(filtered) == 0 {
+		delete(s.ticketLimitByID, userID)
 	}
 	if len(filtered) >= 5 {
 		s.ticketLimitByID[userID] = filtered
@@ -226,7 +205,7 @@ func (s *WsService) broadcastOnline(client *ws.Client) {
 	from := client.DeviceID()
 	localIP, localPort := client.Announcement()
 	s.hub.Broadcast(client.UserID(), client.DeviceID(), ws.MessageEnvelope{
-		ID:   pkg.NewMessageID(),
+		ID:   uuid.NewString(),
 		Type: "device.online",
 		From: &from,
 		Payload: ws.DeviceOnlinePayload{
@@ -242,7 +221,7 @@ func (s *WsService) broadcastOnline(client *ws.Client) {
 func (s *WsService) broadcastOffline(client *ws.Client) {
 	from := client.DeviceID()
 	s.hub.Broadcast(client.UserID(), client.DeviceID(), ws.MessageEnvelope{
-		ID:        pkg.NewMessageID(),
+		ID:        uuid.NewString(),
 		Type:      "device.offline",
 		From:      &from,
 		Timestamp: time.Now().UTC().UnixMilli(),

@@ -17,10 +17,6 @@ func NewTicketRepository(db *gorm.DB) *TicketRepository {
 	return &TicketRepository{db: db}
 }
 
-func (r *TicketRepository) WithTx(tx *gorm.DB) *TicketRepository {
-	return &TicketRepository{db: tx}
-}
-
 func (r *TicketRepository) Create(ticket *model.WsTicket) error {
 	return r.db.Create(ticket).Error
 }

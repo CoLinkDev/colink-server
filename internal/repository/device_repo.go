@@ -17,10 +17,6 @@ func NewDeviceRepository(db *gorm.DB) *DeviceRepository {
 	return &DeviceRepository{db: db}
 }
 
-func (r *DeviceRepository) WithTx(tx *gorm.DB) *DeviceRepository {
-	return &DeviceRepository{db: tx}
-}
-
 func (r *DeviceRepository) CountByUserID(userID uuid.UUID) (int64, error) {
 	var count int64
 	if err := r.db.Model(&model.Device{}).Where("user_id = ?", userID).Count(&count).Error; err != nil {

@@ -3,7 +3,6 @@ package handler
 import (
 	"github.com/gin-gonic/gin"
 
-	"colink-server/internal/pkg"
 	"colink-server/internal/service"
 )
 
@@ -27,11 +26,11 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	result, err := h.authService.Register(req.Email, req.Username, req.Password)
 	if err != nil {
-		pkg.Error(c, err)
+		writeError(c, err)
 		return
 	}
 
-	pkg.Success(c, result)
+	success(c, result)
 }
 
 func (h *AuthHandler) Login(c *gin.Context) {
@@ -45,11 +44,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	result, err := h.authService.Login(req.Identifier, req.Password)
 	if err != nil {
-		pkg.Error(c, err)
+		writeError(c, err)
 		return
 	}
 
-	pkg.Success(c, result)
+	success(c, result)
 }
 
 func (h *AuthHandler) Refresh(c *gin.Context) {
@@ -62,11 +61,11 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 
 	result, err := h.authService.Refresh(req.RefreshToken)
 	if err != nil {
-		pkg.Error(c, err)
+		writeError(c, err)
 		return
 	}
 
-	pkg.Success(c, result)
+	success(c, result)
 }
 
 func (h *AuthHandler) Logout(c *gin.Context) {
@@ -78,11 +77,11 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	}
 
 	if err := h.authService.Logout(userIDFromContext(c), req.RefreshToken); err != nil {
-		pkg.Error(c, err)
+		writeError(c, err)
 		return
 	}
 
-	pkg.Success(c, nil)
+	success(c, nil)
 }
 
 func (h *AuthHandler) ChangePassword(c *gin.Context) {
@@ -95,9 +94,9 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	}
 
 	if err := h.authService.ChangePassword(userIDFromContext(c), req.OldPassword, req.NewPassword); err != nil {
-		pkg.Error(c, err)
+		writeError(c, err)
 		return
 	}
 
-	pkg.Success(c, nil)
+	success(c, nil)
 }

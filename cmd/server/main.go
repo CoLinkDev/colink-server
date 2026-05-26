@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"os"
@@ -17,7 +18,9 @@ import (
 
 	"colink-server/internal/config"
 	"colink-server/internal/handler"
-	"colink-server/internal/model"
+	"colink-server/internal/janitor"
+	"colink-server/internal/migration"
+	"colink-server/internal/repository"
 )
 
 func main() {
@@ -45,13 +48,25 @@ func main() {
 		log.Fatal("open database", zap.Error(err))
 	}
 
-	if cfg.Server.Mode != gin.ReleaseMode {
-		if err := autoMigrate(db); err != nil {
-			log.Fatal("auto migrate", zap.Error(err))
-		}
+	sqlDB, err := db.DB()
+	if err != nil {
+		log.Fatal("open sql database", zap.Error(err))
+	}
+
+	if err := migration.Up(sqlDB, cfg.Database.DBName); err != nil {
+		log.Fatal("run migrations", zap.Error(err))
 	}
 
 	router := handler.NewRouter(cfg, db, log)
+	bgCtx, stopBackground := context.WithCancel(context.Background())
+	defer stopBackground()
+
+	go janitor.New(
+		repository.NewTokenRepository(db),
+		repository.NewTicketRepository(db),
+		time.Hour,
+		log,
+	).Run(bgCtx)
 
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Server.Port),
@@ -72,9 +87,14 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	stopBackground()
 
 	if err := server.Shutdown(ctx); err != nil {
 		log.Error("shutdown server", zap.Error(err))
+	}
+
+	if err := closeDatabase(sqlDB); err != nil {
+		log.Error("close database", zap.Error(err))
 	}
 }
 
@@ -97,15 +117,6 @@ func openDatabase(cfg *config.Config) (*gorm.DB, error) {
 	})
 }
 
-func autoMigrate(db *gorm.DB) error {
-	if err := db.Exec("CREATE EXTENSION IF NOT EXISTS pgcrypto").Error; err != nil {
-		return err
-	}
-
-	return db.AutoMigrate(
-		&model.User{},
-		&model.Device{},
-		&model.RefreshToken{},
-		&model.WsTicket{},
-	)
+func closeDatabase(db *sql.DB) error {
+	return db.Close()
 }

@@ -1,30 +1,32 @@
-package pkg
+package handler
 
 import (
 	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+
+	"colink-server/internal/pkg"
 )
 
-type Envelope struct {
+type envelope struct {
 	Code    int    `json:"code"`
 	Data    any    `json:"data"`
 	Message string `json:"message"`
 }
 
-func Success(c *gin.Context, data any) {
-	c.JSON(http.StatusOK, Envelope{
+func success(c *gin.Context, data any) {
+	c.JSON(http.StatusOK, envelope{
 		Code:    0,
 		Data:    data,
 		Message: "ok",
 	})
 }
 
-func Error(c *gin.Context, err error) {
-	var appErr *AppError
+func writeError(c *gin.Context, err error) {
+	var appErr *pkg.AppError
 	if errors.As(err, &appErr) {
-		c.JSON(appErr.HTTPStatus, Envelope{
+		c.JSON(appErr.HTTPStatus, envelope{
 			Code:    appErr.Code,
 			Data:    nil,
 			Message: appErr.Message,
@@ -32,8 +34,8 @@ func Error(c *gin.Context, err error) {
 		return
 	}
 
-	c.JSON(http.StatusInternalServerError, Envelope{
-		Code:    CodeInternalError,
+	c.JSON(http.StatusInternalServerError, envelope{
+		Code:    pkg.CodeInternalError,
 		Data:    nil,
 		Message: "internal error",
 	})
