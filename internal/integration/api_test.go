@@ -131,6 +131,7 @@ func TestDeviceFlow(t *testing.T) {
 	}))
 
 	device := decodeOK[registerDeviceResult](t, app.request(http.MethodPost, "/api/v1/devices", bearer(owner.Token), map[string]string{
+		"deviceId":  "11111111-1111-4111-8111-111111111111",
 		"name":      "Office PC",
 		"type":      "windows",
 		"publicKey": "QUJDRA==",
@@ -156,6 +157,26 @@ func TestDeviceFlow(t *testing.T) {
 	if len(devices.Devices) != 0 {
 		t.Fatal("expected device list to be empty after delete")
 	}
+
+	expectStatus(t, app.request(http.MethodPost, "/api/v1/devices", bearer(owner.Token), map[string]string{
+		"deviceId":  "not-a-uuid",
+		"name":      "Invalid",
+		"type":      "windows",
+		"publicKey": "QUJDRA==",
+	}), http.StatusBadRequest)
+
+	expectStatus(t, app.request(http.MethodPost, "/api/v1/devices", bearer(owner.Token), map[string]string{
+		"deviceId":  "22222222-2222-4222-8222-222222222222",
+		"name":      "First",
+		"type":      "windows",
+		"publicKey": "QUJDRA==",
+	}), http.StatusOK)
+	expectStatus(t, app.request(http.MethodPost, "/api/v1/devices", bearer(owner.Token), map[string]string{
+		"deviceId":  "22222222-2222-4222-8222-222222222222",
+		"name":      "Duplicate",
+		"type":      "windows",
+		"publicKey": "QUJDRA==",
+	}), http.StatusConflict)
 }
 
 func TestWsTicketFlow(t *testing.T) {
@@ -168,6 +189,7 @@ func TestWsTicketFlow(t *testing.T) {
 		"password": "password123",
 	}))
 	device := decodeOK[registerDeviceResult](t, app.request(http.MethodPost, "/api/v1/devices", bearer(auth.Token), map[string]string{
+		"deviceId":  "33333333-3333-4333-8333-333333333333",
 		"name":      "Laptop",
 		"type":      "windows",
 		"publicKey": "SUpLTA==",

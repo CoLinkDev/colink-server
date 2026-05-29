@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"colink-server/internal/model"
 	"colink-server/internal/pkg"
 	"colink-server/internal/repository"
@@ -41,8 +43,13 @@ func NewDeviceService(deviceRepo *repository.DeviceRepository, hub *ws.Hub) *Dev
 	}
 }
 
-func (s *DeviceService) Register(userID string, name string, deviceType string, publicKey string) (*RegisterDeviceResult, error) {
+func (s *DeviceService) Register(userID string, deviceID string, name string, deviceType string, publicKey string) (*RegisterDeviceResult, error) {
 	userUUID, err := parseUUID(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	deviceUUID, err := parseDeviceUUID(deviceID)
 	if err != nil {
 		return nil, err
 	}
@@ -67,12 +74,21 @@ func (s *DeviceService) Register(userID string, name string, deviceType string, 
 		return nil, pkg.NewAppError(http.StatusConflict, pkg.CodeDeviceLimitReached, "device limit reached")
 	}
 
+	exists, err := s.deviceRepo.ExistsByID(deviceUUID)
+	if err != nil {
+		return nil, pkg.InternalError(err)
+	}
+	if exists {
+		return nil, pkg.NewAppError(http.StatusConflict, pkg.CodeDeviceIDConflict, "device id conflict")
+	}
+
 	deviceSecret, err := pkg.GenerateOpaqueToken(48)
 	if err != nil {
 		return nil, pkg.InternalError(err)
 	}
 
 	device := &model.Device{
+		ID:           deviceUUID,
 		UserID:       userUUID,
 		Name:         name,
 		Type:         deviceType,
@@ -166,4 +182,13 @@ func (s *DeviceService) RotateKey(userID string, deviceID string, publicKey stri
 	}
 
 	return nil
+}
+
+func parseDeviceUUID(value string) (uuid.UUID, error) {
+	id, err := uuid.Parse(value)
+	if err != nil || id.Version() != 4 {
+		return uuid.Nil, pkg.NewAppError(http.StatusBadRequest, pkg.CodeInvalidDeviceKey, "invalid device id")
+	}
+
+	return id, nil
 }

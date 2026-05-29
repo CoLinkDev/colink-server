@@ -16,6 +16,7 @@ func NewDeviceHandler(deviceService *service.DeviceService) *DeviceHandler {
 
 func (h *DeviceHandler) Register(c *gin.Context) {
 	var req struct {
+		DeviceID  string `json:"deviceId" binding:"required"`
 		Name      string `json:"name" binding:"required"`
 		Type      string `json:"type" binding:"required"`
 		PublicKey string `json:"publicKey" binding:"required"`
@@ -24,7 +25,7 @@ func (h *DeviceHandler) Register(c *gin.Context) {
 		return
 	}
 
-	result, err := h.deviceService.Register(userIDFromContext(c), req.Name, req.Type, req.PublicKey)
+	result, err := h.deviceService.Register(userIDFromContext(c), req.DeviceID, req.Name, req.Type, req.PublicKey)
 	if err != nil {
 		writeError(c, err)
 		return

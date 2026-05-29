@@ -26,6 +26,15 @@ func (r *DeviceRepository) CountByUserID(userID uuid.UUID) (int64, error) {
 	return count, nil
 }
 
+func (r *DeviceRepository) ExistsByID(deviceID uuid.UUID) (bool, error) {
+	var count int64
+	if err := r.db.Model(&model.Device{}).Where("id = ?", deviceID).Count(&count).Error; err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
+}
+
 func (r *DeviceRepository) Create(device *model.Device) error {
 	return r.db.Create(device).Error
 }

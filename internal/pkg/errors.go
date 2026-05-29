@@ -22,6 +22,7 @@ const (
 	CodeDeviceLimitReached = 2001
 	CodeInvalidDeviceType  = 2002
 	CodeInvalidDeviceKey   = 2003
+	CodeDeviceIDConflict   = 2004
 	CodeDeviceNotFound     = 2010
 )
 
