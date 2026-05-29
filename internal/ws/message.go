@@ -18,14 +18,7 @@ type MessageEnvelope struct {
 	Timestamp int64   `json:"timestamp,omitempty"`
 }
 
-type AnnouncePayload struct {
-	LocalIP   string `json:"localIp"`
-	LocalPort int    `json:"localPort"`
-}
-
 type DeviceOnlinePayload struct {
-	Name      string `json:"name"`
-	Type      string `json:"type"`
-	LocalIP   string `json:"localIp,omitempty"`
-	LocalPort int    `json:"localPort,omitempty"`
+	Name string `json:"name"`
+	Type string `json:"type"`
 }

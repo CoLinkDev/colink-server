@@ -138,8 +138,6 @@ func (s *WsService) HandleMessage(client *ws.Client, message ws.ClientMessage) {
 		})
 	case "relay":
 		s.handleRelay(client, message)
-	case "announce":
-		s.handleAnnounce(client, message)
 	}
 }
 
@@ -188,31 +186,15 @@ func (s *WsService) handleRelay(client *ws.Client, message ws.ClientMessage) {
 	})
 }
 
-func (s *WsService) handleAnnounce(client *ws.Client, message ws.ClientMessage) {
-	var payload ws.AnnouncePayload
-	if err := json.Unmarshal(message.Payload, &payload); err != nil {
-		return
-	}
-	if payload.LocalIP == "" || payload.LocalPort <= 0 {
-		return
-	}
-
-	client.UpdateAnnouncement(payload.LocalIP, payload.LocalPort)
-	s.broadcastOnline(client)
-}
-
 func (s *WsService) broadcastOnline(client *ws.Client) {
 	from := client.DeviceID()
-	localIP, localPort := client.Announcement()
 	s.hub.Broadcast(client.UserID(), client.DeviceID(), ws.MessageEnvelope{
 		ID:   uuid.NewString(),
 		Type: "device.online",
 		From: &from,
 		Payload: ws.DeviceOnlinePayload{
-			Name:      client.DeviceName(),
-			Type:      client.DeviceType(),
-			LocalIP:   localIP,
-			LocalPort: localPort,
+			Name: client.DeviceName(),
+			Type: client.DeviceType(),
 		},
 		Timestamp: time.Now().UTC().UnixMilli(),
 	})

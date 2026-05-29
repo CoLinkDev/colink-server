@@ -22,9 +22,6 @@ type Client struct {
 	disconnectOnce sync.Once
 	stateMu        sync.RWMutex
 	closed         bool
-	metaMu         sync.RWMutex
-	localIP        string
-	localPort      int
 }
 
 func NewClient(
@@ -137,21 +134,6 @@ func (c *Client) DeviceName() string {
 
 func (c *Client) DeviceType() string {
 	return c.deviceType
-}
-
-func (c *Client) UpdateAnnouncement(localIP string, localPort int) {
-	c.metaMu.Lock()
-	defer c.metaMu.Unlock()
-
-	c.localIP = localIP
-	c.localPort = localPort
-}
-
-func (c *Client) Announcement() (string, int) {
-	c.metaMu.RLock()
-	defer c.metaMu.RUnlock()
-
-	return c.localIP, c.localPort
 }
 
 func (c *Client) handleDisconnect() {
