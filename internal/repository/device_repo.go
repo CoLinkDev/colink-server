@@ -71,7 +71,10 @@ func (r *DeviceRepository) Delete(deviceID uuid.UUID, userID uuid.UUID) error {
 func (r *DeviceRepository) UpdatePublicKey(deviceID uuid.UUID, userID uuid.UUID, publicKey string) error {
 	return r.db.Model(&model.Device{}).
 		Where("id = ? AND user_id = ?", deviceID, userID).
-		Updates(map[string]any{"public_key": publicKey}).
+		Updates(map[string]any{
+			"public_key":            publicKey,
+			"public_key_updated_at": time.Now().UTC(),
+		}).
 		Error
 }
 

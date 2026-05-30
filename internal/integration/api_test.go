@@ -55,9 +55,10 @@ type registerDeviceResult struct {
 }
 
 type deviceItem struct {
-	DeviceID  string `json:"deviceId"`
-	Name      string `json:"name"`
-	PublicKey string `json:"publicKey"`
+	DeviceID           string     `json:"deviceId"`
+	Name               string     `json:"name"`
+	PublicKey          string     `json:"publicKey"`
+	PublicKeyUpdatedAt *time.Time `json:"publicKeyUpdatedAt"`
 }
 
 type deviceListResult struct {
@@ -141,14 +142,27 @@ func TestDeviceFlow(t *testing.T) {
 	if len(devices.Devices) != 1 || devices.Devices[0].DeviceID != device.DeviceID {
 		t.Fatal("device list did not return the created device")
 	}
+	if devices.Devices[0].PublicKeyUpdatedAt == nil {
+		t.Fatal("device list did not return public key update time")
+	}
+	createdKeyUpdatedAt := *devices.Devices[0].PublicKeyUpdatedAt
 
 	expectStatus(t, app.request(http.MethodPut, "/api/v1/devices/"+device.DeviceID, bearer(owner.Token), map[string]string{
 		"name": "Home PC",
 	}), http.StatusOK)
 
+	time.Sleep(5 * time.Millisecond)
 	expectStatus(t, app.request(http.MethodPut, "/api/v1/devices/"+device.DeviceID+"/key", bearer(owner.Token), map[string]string{
 		"publicKey": "RUZHSA==",
 	}), http.StatusOK)
+
+	devices = decodeOK[deviceListResult](t, app.request(http.MethodGet, "/api/v1/devices", bearer(owner.Token), nil))
+	if devices.Devices[0].PublicKey != "RUZHSA==" {
+		t.Fatal("device list did not return rotated public key")
+	}
+	if devices.Devices[0].PublicKeyUpdatedAt == nil || !devices.Devices[0].PublicKeyUpdatedAt.After(createdKeyUpdatedAt) {
+		t.Fatal("device list did not return updated public key update time")
+	}
 
 	expectStatus(t, app.request(http.MethodDelete, "/api/v1/devices/"+device.DeviceID, bearer(other.Token), nil), http.StatusNotFound)
 	expectStatus(t, app.request(http.MethodDelete, "/api/v1/devices/"+device.DeviceID, bearer(owner.Token), nil), http.StatusOK)

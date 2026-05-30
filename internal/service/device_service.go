@@ -19,12 +19,13 @@ type RegisterDeviceResult struct {
 }
 
 type DeviceItem struct {
-	DeviceID  string     `json:"deviceId"`
-	Name      string     `json:"name"`
-	Type      string     `json:"type"`
-	Online    bool       `json:"online"`
-	LastSeen  *time.Time `json:"lastSeen"`
-	PublicKey string     `json:"publicKey"`
+	DeviceID           string     `json:"deviceId"`
+	Name               string     `json:"name"`
+	Type               string     `json:"type"`
+	Online             bool       `json:"online"`
+	LastSeen           *time.Time `json:"lastSeen"`
+	PublicKey          string     `json:"publicKey"`
+	PublicKeyUpdatedAt *time.Time `json:"publicKeyUpdatedAt"`
 }
 
 type DeviceListResult struct {
@@ -86,14 +87,16 @@ func (s *DeviceService) Register(userID string, deviceID string, name string, de
 	if err != nil {
 		return nil, pkg.InternalError(err)
 	}
+	now := time.Now().UTC()
 
 	device := &model.Device{
-		ID:           deviceUUID,
-		UserID:       userUUID,
-		Name:         name,
-		Type:         deviceType,
-		PublicKey:    strings.TrimSpace(publicKey),
-		DeviceSecret: deviceSecret,
+		ID:                 deviceUUID,
+		UserID:             userUUID,
+		Name:               name,
+		Type:               deviceType,
+		PublicKey:          strings.TrimSpace(publicKey),
+		PublicKeyUpdatedAt: now,
+		DeviceSecret:       deviceSecret,
 	}
 	if err := s.deviceRepo.Create(device); err != nil {
 		return nil, pkg.InternalError(err)
@@ -119,12 +122,13 @@ func (s *DeviceService) List(userID string) (*DeviceListResult, error) {
 	items := make([]DeviceItem, 0, len(devices))
 	for _, device := range devices {
 		items = append(items, DeviceItem{
-			DeviceID:  device.ID.String(),
-			Name:      device.Name,
-			Type:      device.Type,
-			Online:    s.hub.IsOnline(userID, device.ID.String()),
-			LastSeen:  device.LastSeenAt,
-			PublicKey: device.PublicKey,
+			DeviceID:           device.ID.String(),
+			Name:               device.Name,
+			Type:               device.Type,
+			Online:             s.hub.IsOnline(userID, device.ID.String()),
+			LastSeen:           device.LastSeenAt,
+			PublicKey:          device.PublicKey,
+			PublicKeyUpdatedAt: &device.PublicKeyUpdatedAt,
 		})
 	}
 
