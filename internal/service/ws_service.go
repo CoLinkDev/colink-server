@@ -138,6 +138,8 @@ func (s *WsService) HandleMessage(client *ws.Client, message ws.ClientMessage) {
 		})
 	case "relay":
 		s.handleRelay(client, message)
+	case "broadcast":
+		s.handleBroadcast(client, message)
 	}
 }
 
@@ -181,6 +183,22 @@ func (s *WsService) handleRelay(client *ws.Client, message ws.ClientMessage) {
 		Type:      "relay",
 		From:      &from,
 		To:        &to,
+		Payload:   json.RawMessage(message.Payload),
+		Timestamp: time.Now().UTC().UnixMilli(),
+	})
+}
+
+func (s *WsService) handleBroadcast(client *ws.Client, message ws.ClientMessage) {
+	if len(message.Payload) == 0 {
+		return
+	}
+
+	from := client.DeviceID()
+	s.hub.Broadcast(client.UserID(), client.DeviceID(), ws.MessageEnvelope{
+		ID:        message.ID,
+		Type:      "broadcast",
+		From:      &from,
+		To:        nil,
 		Payload:   json.RawMessage(message.Payload),
 		Timestamp: time.Now().UTC().UnixMilli(),
 	})
