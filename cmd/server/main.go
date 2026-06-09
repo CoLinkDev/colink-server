@@ -21,6 +21,7 @@ import (
 	"colink-server/internal/janitor"
 	"colink-server/internal/migration"
 	"colink-server/internal/repository"
+	"colink-server/internal/worker"
 )
 
 func main() {
@@ -57,7 +58,7 @@ func main() {
 		log.Fatal("run migrations", zap.Error(err))
 	}
 
-	router := handler.NewRouter(cfg, db, log)
+	router, updateService := handler.NewRouter(cfg, db, log)
 	bgCtx, stopBackground := context.WithCancel(context.Background())
 	defer stopBackground()
 
@@ -65,6 +66,12 @@ func main() {
 		repository.NewTokenRepository(db),
 		repository.NewTicketRepository(db),
 		time.Hour,
+		log,
+	).Run(bgCtx)
+
+	go worker.NewUpdateChecker(
+		updateService,
+		cfg.Update.CheckInterval,
 		log,
 	).Run(bgCtx)
 

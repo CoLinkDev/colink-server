@@ -24,6 +24,10 @@ const (
 	CodeInvalidDeviceKey   = 2003
 	CodeDeviceIDConflict   = 2004
 	CodeDeviceNotFound     = 2010
+
+	CodeUpdatePlatformNotSupported = 5001
+	CodeUpdateReleaseNotFound      = 5002
+	CodeUpdateAssetNotFound        = 5003
 )
 
 type AppError struct {

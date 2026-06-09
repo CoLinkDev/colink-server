@@ -14,6 +14,7 @@ type Config struct {
 	Database DatabaseConfig `mapstructure:"database"`
 	JWT      JWTConfig      `mapstructure:"jwt"`
 	WS       WSConfig       `mapstructure:"ws"`
+	Update   UpdateConfig   `mapstructure:"update"`
 }
 
 type ServerConfig struct {
@@ -38,6 +39,24 @@ type JWTConfig struct {
 
 type WSConfig struct {
 	TicketTTL time.Duration `mapstructure:"ticket_ttl"`
+}
+
+type UpdateConfig struct {
+	CheckInterval time.Duration `mapstructure:"check_interval"`
+	StoragePath   string        `mapstructure:"storage_path"`
+	GitHub        GitHubConfig  `mapstructure:"github"`
+}
+
+type GitHubConfig struct {
+	Token string             `mapstructure:"token"`
+	Proxy string             `mapstructure:"proxy"`
+	Repos []GitHubRepoConfig `mapstructure:"repos"`
+}
+
+type GitHubRepoConfig struct {
+	Owner    string `mapstructure:"owner"`
+	Repo     string `mapstructure:"repo"`
+	Platform string `mapstructure:"platform"`
 }
 
 func Load() (*Config, error) {
@@ -90,24 +109,34 @@ func Load() (*Config, error) {
 	if cfg.WS.TicketTTL == 0 {
 		cfg.WS.TicketTTL = 30 * time.Second
 	}
+	if cfg.Update.CheckInterval == 0 {
+		cfg.Update.CheckInterval = 30 * time.Minute
+	}
+	if cfg.Update.StoragePath == "" {
+		cfg.Update.StoragePath = "./data/updates"
+	}
 
 	return &cfg, nil
 }
 
 func bindEnv(v *viper.Viper) {
 	keys := map[string]string{
-		"server.port":       "SERVER_PORT",
-		"server.mode":       "SERVER_MODE",
-		"database.host":     "DATABASE_HOST",
-		"database.port":     "DATABASE_PORT",
-		"database.user":     "DATABASE_USER",
-		"database.password": "DATABASE_PASSWORD",
-		"database.dbname":   "DATABASE_DBNAME",
-		"database.sslmode":  "DATABASE_SSLMODE",
-		"jwt.secret":        "JWT_SECRET",
-		"jwt.access_ttl":    "JWT_ACCESS_TTL",
-		"jwt.refresh_ttl":   "JWT_REFRESH_TTL",
-		"ws.ticket_ttl":     "WS_TICKET_TTL",
+		"server.port":           "SERVER_PORT",
+		"server.mode":           "SERVER_MODE",
+		"database.host":         "DATABASE_HOST",
+		"database.port":         "DATABASE_PORT",
+		"database.user":         "DATABASE_USER",
+		"database.password":     "DATABASE_PASSWORD",
+		"database.dbname":       "DATABASE_DBNAME",
+		"database.sslmode":      "DATABASE_SSLMODE",
+		"jwt.secret":            "JWT_SECRET",
+		"jwt.access_ttl":        "JWT_ACCESS_TTL",
+		"jwt.refresh_ttl":       "JWT_REFRESH_TTL",
+		"ws.ticket_ttl":         "WS_TICKET_TTL",
+		"update.check_interval": "UPDATE_CHECK_INTERVAL",
+		"update.storage_path":   "UPDATE_STORAGE_PATH",
+		"update.github.token":   "UPDATE_GITHUB_TOKEN",
+		"update.github.proxy":   "UPDATE_GITHUB_PROXY",
 	}
 
 	for key, env := range keys {

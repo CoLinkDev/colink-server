@@ -277,7 +277,8 @@ func newTestApp(t *testing.T, ticketTTL time.Duration) *testApp {
 		},
 	}
 
-	server := httptest.NewServer(handler.NewRouter(cfg, db, zap.NewNop()))
+	router, _ := handler.NewRouter(cfg, db, zap.NewNop())
+	server := httptest.NewServer(router)
 	return &testApp{cfg: cfg, db: db, sqlDB: sqlDB, server: server}
 }
 

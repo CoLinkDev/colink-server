@@ -19,3 +19,17 @@ jwt:
 
 ws:
   ticket_ttl: 30s
+
+update:
+  check_interval: 30m
+  storage_path: ./data/updates
+  github:
+    token: ""
+    proxy: ""
+    repos:
+      - owner: CoLinkDev
+        repo: colink-android
+        platform: android
+      - owner: CoLinkDev
+        repo: colink-desktop
+        platform: windows
