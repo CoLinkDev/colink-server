@@ -18,6 +18,34 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: colink-server
+
+      - uses: actions/checkout@v4
+        with:
+          repository: CoLinkDev/colink-frontend
+          path: colink-frontend
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: colink-frontend/pnpm-lock.yaml
+
+      - name: Build frontend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+        working-directory: colink-frontend
+
+      - name: Copy frontend dist
+        run: |
+          find colink-server/internal/handler/frontend/dist/ -type f ! -name 'embed-placeholder.txt' -delete
+          cp -r colink-frontend/dist/* colink-server/internal/handler/frontend/dist/
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -42,7 +70,8 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: colink-server
+          file: colink-server/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

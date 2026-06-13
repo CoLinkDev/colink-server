@@ -74,5 +74,6 @@ func NewRouter(cfg *config.Config, db *gorm.DB, log *zap.Logger) (*gin.Engine, *
 	update.GET("/download/:platform/:version/:filename", updateHandler.DownloadAsset)
 
 	router.GET("/ws/v1", wsHandler.Connect)
+	serveFrontend(router)
 	return router, updateService
 }

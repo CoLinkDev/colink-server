@@ -29,6 +29,10 @@ go.work.sum
 config.local.yaml
 data/
 
+# Frontend dist (built externally, only placeholder committed)
+internal/handler/frontend/dist/*
+!internal/handler/frontend/dist/embed-placeholder.txt
+
 # Editor/IDE
 # .idea/
 # .vscode/

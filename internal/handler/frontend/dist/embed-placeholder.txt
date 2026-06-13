@@ -1,0 +1,1 @@
+placeholder for Go embed when frontend dist has not been built
