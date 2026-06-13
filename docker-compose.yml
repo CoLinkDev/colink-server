@@ -1,12 +1,10 @@
 services:
   postgres:
     image: postgres:16-alpine
-    restart: unless-stopped
-    ports:
-      - "5433:5432"
+    restart: always
     environment:
       POSTGRES_USER: ${DB_USER:-colink}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-colink_dev}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       POSTGRES_DB: ${DB_NAME:-colink}
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -19,25 +17,26 @@ services:
       - colink
 
   server:
+    image: ${SERVER_IMAGE:-colink-server:latest}
     build:
       context: .
       dockerfile: Dockerfile
-    restart: unless-stopped
+    restart: always
     depends_on:
       postgres:
         condition: service_healthy
     ports:
       - "${SERVER_PORT:-8080}:8080"
     environment:
-      SERVER_MODE: debug
+      SERVER_MODE: release
       SERVER_PORT: 8080
       DATABASE_HOST: postgres
       DATABASE_PORT: 5432
       DATABASE_USER: ${DB_USER:-colink}
-      DATABASE_PASSWORD: ${DB_PASSWORD:-colink_dev}
+      DATABASE_PASSWORD: ${DB_PASSWORD}
       DATABASE_DBNAME: ${DB_NAME:-colink}
       DATABASE_SSLMODE: disable
-      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
       JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-720h}
       WS_TICKET_TTL: ${WS_TICKET_TTL:-30s}

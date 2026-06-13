@@ -13,7 +13,6 @@ FROM alpine:3.20
 WORKDIR /app
 
 COPY --from=builder /colink-server /usr/local/bin/colink-server
-COPY config.yaml ./config.yaml
 
 EXPOSE 8080
 
