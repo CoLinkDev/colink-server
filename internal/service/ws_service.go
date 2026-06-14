@@ -16,6 +16,8 @@ import (
 	"colink-server/internal/ws"
 )
 
+const lastSeenUpdateInterval = time.Minute
+
 type TicketResult struct {
 	Ticket    string `json:"ticket"`
 	ExpiresIn int64  `json:"expiresIn"`
@@ -35,6 +37,8 @@ type WsService struct {
 	ticketTTL       time.Duration
 	ticketLimitMu   sync.Mutex
 	ticketLimitByID map[string][]time.Time
+	lastSeenMu      sync.Mutex
+	lastSeenByID    map[uuid.UUID]time.Time
 }
 
 func NewWsService(
@@ -49,6 +53,7 @@ func NewWsService(
 		hub:             hub,
 		ticketTTL:       ticketTTL,
 		ticketLimitByID: make(map[string][]time.Time),
+		lastSeenByID:    make(map[uuid.UUID]time.Time),
 	}
 }
 
@@ -114,6 +119,7 @@ func (s *WsService) ConsumeTicket(ticket string) (*WsSession, error) {
 }
 
 func (s *WsService) HandleConnected(client *ws.Client) {
+	s.refreshLastSeen(client.DeviceUUID(), time.Now().UTC(), true)
 	if s.hub.Register(client) {
 		s.broadcastOnline(client)
 	}
@@ -124,23 +130,44 @@ func (s *WsService) HandleDisconnect(client *ws.Client) {
 		return
 	}
 
-	_ = s.deviceRepo.UpdateLastSeen(client.DeviceUUID(), time.Now().UTC())
+	s.refreshLastSeen(client.DeviceUUID(), time.Now().UTC(), true)
 	s.broadcastOffline(client)
 }
 
 func (s *WsService) HandleMessage(client *ws.Client, message ws.ClientMessage) {
 	switch message.Type {
 	case "ping":
+		now := time.Now().UTC()
+		s.refreshLastSeen(client.DeviceUUID(), now, false)
 		client.Send(ws.MessageEnvelope{
 			ID:        message.ID,
 			Type:      "pong",
-			Timestamp: time.Now().UTC().UnixMilli(),
+			Timestamp: now.UnixMilli(),
 		})
 	case "relay":
 		s.handleRelay(client, message)
 	case "broadcast":
 		s.handleBroadcast(client, message)
 	}
+}
+
+func (s *WsService) refreshLastSeen(deviceID uuid.UUID, at time.Time, force bool) {
+	if !force {
+		s.lastSeenMu.Lock()
+		previous, ok := s.lastSeenByID[deviceID]
+		if ok && at.Sub(previous) < lastSeenUpdateInterval {
+			s.lastSeenMu.Unlock()
+			return
+		}
+		s.lastSeenByID[deviceID] = at
+		s.lastSeenMu.Unlock()
+	} else {
+		s.lastSeenMu.Lock()
+		s.lastSeenByID[deviceID] = at
+		s.lastSeenMu.Unlock()
+	}
+
+	_ = s.deviceRepo.UpdateLastSeen(deviceID, at)
 }
 
 func (s *WsService) allowTicketIssue(userID string, now time.Time) bool {
