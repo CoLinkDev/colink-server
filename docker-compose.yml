@@ -4,7 +4,7 @@ services:
     restart: always
     environment:
       POSTGRES_USER: ${DB_USER:-colink}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?-colink}
       POSTGRES_DB: ${DB_NAME:-colink}
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -37,7 +37,7 @@ services:
       DATABASE_HOST: postgres
       DATABASE_PORT: 5432
       DATABASE_USER: ${DB_USER:-colink}
-      DATABASE_PASSWORD: ${DB_PASSWORD}
+      DATABASE_PASSWORD: ${DB_PASSWORD:-colink}
       DATABASE_DBNAME: ${DB_NAME:-colink}
       DATABASE_SSLMODE: disable
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
