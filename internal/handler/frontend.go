@@ -21,6 +21,10 @@ func serveFrontend(router *gin.Engine) {
 	if _, err := fs.Stat(distFS, "index.html"); err != nil {
 		return
 	}
+	indexHTML, err := fs.ReadFile(distFS, "index.html")
+	if err != nil {
+		return
+	}
 
 	router.NoRoute(func(c *gin.Context) {
 		path := c.Request.URL.Path
@@ -40,11 +44,16 @@ func serveFrontend(router *gin.Engine) {
 			filePath = "index.html"
 		}
 
+		if filePath == "index.html" {
+			c.Data(http.StatusOK, "text/html; charset=utf-8", indexHTML)
+			return
+		}
+
 		if _, err := fs.Stat(distFS, filePath); err == nil {
 			c.FileFromFS(filePath, http.FS(distFS))
 			return
 		}
 
-		c.FileFromFS("index.html", http.FS(distFS))
+		c.Data(http.StatusOK, "text/html; charset=utf-8", indexHTML)
 	})
 }

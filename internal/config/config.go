@@ -48,7 +48,6 @@ type UpdateConfig struct {
 
 type GitHubConfig struct {
 	Token string
-	Proxy string
 	Repos []GitHubRepoConfig
 }
 
@@ -133,7 +132,6 @@ func Load() (*Config, error) {
 			StoragePath:   env("UPDATE_STORAGE_PATH", "./data/updates"),
 			GitHub: GitHubConfig{
 				Token: env("UPDATE_GITHUB_TOKEN", ""),
-				Proxy: env("UPDATE_GITHUB_PROXY", ""),
 			},
 		},
 	}

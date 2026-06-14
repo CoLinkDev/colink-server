@@ -74,7 +74,7 @@ func NewUpdateService(releaseRepo *repository.ReleaseRepository, cfg config.Upda
 		releaseRepo: releaseRepo,
 		cfg:         cfg,
 		log:         log,
-		httpClient:  newGitHubHTTPClient(cfg.GitHub.Proxy),
+		httpClient:  newGitHubHTTPClient(),
 	}
 }
 
@@ -430,14 +430,8 @@ func cleanAssetFileName(name string) (string, error) {
 	return fileName, nil
 }
 
-func newGitHubHTTPClient(proxyURL string) *http.Client {
+func newGitHubHTTPClient() *http.Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
-	if strings.TrimSpace(proxyURL) != "" {
-		if parsed, err := url.Parse(proxyURL); err == nil {
-			transport.Proxy = http.ProxyURL(parsed)
-		}
-	}
-
 	return &http.Client{
 		Transport: transport,
 		Timeout:   10 * time.Minute,
