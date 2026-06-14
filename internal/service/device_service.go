@@ -16,7 +16,8 @@ import (
 )
 
 type RegisterDeviceResult struct {
-	DeviceID string `json:"deviceId"`
+	DeviceID     string `json:"deviceId"`
+	DeviceSecret string `json:"deviceSecret"`
 }
 
 type DeviceItem struct {
@@ -92,7 +93,10 @@ func (s *DeviceService) Register(userID string, deviceID string, name string, de
 			return nil, pkg.InternalError(err)
 		}
 
-		return &RegisterDeviceResult{DeviceID: existing.ID.String()}, nil
+		return &RegisterDeviceResult{
+			DeviceID:     existing.ID.String(),
+			DeviceSecret: "",
+		}, nil
 	}
 
 	count, err := s.deviceRepo.CountByUserID(userUUID)
@@ -117,7 +121,8 @@ func (s *DeviceService) Register(userID string, deviceID string, name string, de
 	}
 
 	return &RegisterDeviceResult{
-		DeviceID: device.ID.String(),
+		DeviceID:     device.ID.String(),
+		DeviceSecret: "",
 	}, nil
 }
 
