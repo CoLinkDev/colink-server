@@ -57,6 +57,32 @@ func (r *DeviceRepository) FindByIDAndUserID(deviceID uuid.UUID, userID uuid.UUI
 	return &device, nil
 }
 
+func (r *DeviceRepository) FindByID(deviceID uuid.UUID) (*model.Device, error) {
+	var device model.Device
+	if err := r.db.Where("id = ?", deviceID).First(&device).Error; err != nil {
+		return nil, err
+	}
+
+	return &device, nil
+}
+
+func (r *DeviceRepository) UpdateRegistration(deviceID uuid.UUID, userID uuid.UUID, name string, deviceType string, publicKey string, publicKeyChanged bool) error {
+	updates := map[string]any{
+		"name":       name,
+		"type":       deviceType,
+		"public_key": publicKey,
+		"updated_at": time.Now().UTC(),
+	}
+	if publicKeyChanged {
+		updates["public_key_updated_at"] = time.Now().UTC()
+	}
+
+	return r.db.Model(&model.Device{}).
+		Where("id = ? AND user_id = ?", deviceID, userID).
+		Updates(updates).
+		Error
+}
+
 func (r *DeviceRepository) UpdateName(deviceID uuid.UUID, userID uuid.UUID, name string) error {
 	return r.db.Model(&model.Device{}).
 		Where("id = ? AND user_id = ?", deviceID, userID).

@@ -1,11 +1,13 @@
 package service
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 
 	"colink-server/internal/model"
 	"colink-server/internal/pkg"
@@ -14,8 +16,7 @@ import (
 )
 
 type RegisterDeviceResult struct {
-	DeviceID     string `json:"deviceId"`
-	DeviceSecret string `json:"deviceSecret"`
+	DeviceID string `json:"deviceId"`
 }
 
 type DeviceItem struct {
@@ -67,25 +68,39 @@ func (s *DeviceService) Register(userID string, deviceID string, name string, de
 		return nil, err
 	}
 
+	existing, err := s.deviceRepo.FindByID(deviceUUID)
+	if err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, pkg.InternalError(err)
+		}
+		existing = nil
+	}
+
+	if existing != nil && existing.UserID != userUUID {
+		return nil, pkg.NewAppError(http.StatusConflict, pkg.CodeDeviceIDConflict, "device id conflict")
+	}
+
+	if existing != nil {
+		if err := s.deviceRepo.UpdateRegistration(
+			deviceUUID,
+			userUUID,
+			name,
+			deviceType,
+			strings.TrimSpace(publicKey),
+			existing.PublicKey != strings.TrimSpace(publicKey),
+		); err != nil {
+			return nil, pkg.InternalError(err)
+		}
+
+		return &RegisterDeviceResult{DeviceID: existing.ID.String()}, nil
+	}
+
 	count, err := s.deviceRepo.CountByUserID(userUUID)
 	if err != nil {
 		return nil, pkg.InternalError(err)
 	}
 	if count >= 10 {
 		return nil, pkg.NewAppError(http.StatusConflict, pkg.CodeDeviceLimitReached, "device limit reached")
-	}
-
-	exists, err := s.deviceRepo.ExistsByID(deviceUUID)
-	if err != nil {
-		return nil, pkg.InternalError(err)
-	}
-	if exists {
-		return nil, pkg.NewAppError(http.StatusConflict, pkg.CodeDeviceIDConflict, "device id conflict")
-	}
-
-	deviceSecret, err := pkg.GenerateOpaqueToken(48)
-	if err != nil {
-		return nil, pkg.InternalError(err)
 	}
 	now := time.Now().UTC()
 
@@ -96,15 +111,13 @@ func (s *DeviceService) Register(userID string, deviceID string, name string, de
 		Type:               deviceType,
 		PublicKey:          strings.TrimSpace(publicKey),
 		PublicKeyUpdatedAt: now,
-		DeviceSecret:       deviceSecret,
 	}
 	if err := s.deviceRepo.Create(device); err != nil {
 		return nil, pkg.InternalError(err)
 	}
 
 	return &RegisterDeviceResult{
-		DeviceID:     device.ID.String(),
-		DeviceSecret: deviceSecret,
+		DeviceID: device.ID.String(),
 	}, nil
 }
 

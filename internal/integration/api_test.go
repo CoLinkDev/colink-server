@@ -189,6 +189,18 @@ func TestDeviceFlow(t *testing.T) {
 		"deviceId":  "22222222-2222-4222-8222-222222222222",
 		"name":      "Duplicate",
 		"type":      "windows",
+		"publicKey": "SUpLTA==",
+	}), http.StatusOK)
+
+	devices = decodeOK[deviceListResult](t, app.request(http.MethodGet, "/api/v1/devices", bearer(owner.Token), nil))
+	if len(devices.Devices) != 1 || devices.Devices[0].Name != "Duplicate" || devices.Devices[0].PublicKey != "SUpLTA==" {
+		t.Fatal("device upsert did not update existing device")
+	}
+
+	expectStatus(t, app.request(http.MethodPost, "/api/v1/devices", bearer(other.Token), map[string]string{
+		"deviceId":  "22222222-2222-4222-8222-222222222222",
+		"name":      "Stolen",
+		"type":      "windows",
 		"publicKey": "QUJDRA==",
 	}), http.StatusConflict)
 }

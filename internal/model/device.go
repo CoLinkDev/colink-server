@@ -13,7 +13,6 @@ type Device struct {
 	Type               string     `gorm:"size:20;not null;check:chk_device_type,type IN ('windows','android','macos','linux','ios')"`
 	PublicKey          string     `gorm:"type:text;not null"`
 	PublicKeyUpdatedAt time.Time  `gorm:"type:timestamptz;not null;default:now()"`
-	DeviceSecret       string     `gorm:"size:128;not null"`
 	LastSeenAt         *time.Time `gorm:"type:timestamptz"`
 	CreatedAt          time.Time  `gorm:"not null;default:now()"`
 	UpdatedAt          time.Time  `gorm:"not null;default:now()"`
