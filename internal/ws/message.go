@@ -19,6 +19,7 @@ type MessageEnvelope struct {
 }
 
 type DeviceOnlinePayload struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
+	Name            string `json:"name"`
+	Type            string `json:"type"`
+	BusinessVersion string `json:"businessVersion"`
 }

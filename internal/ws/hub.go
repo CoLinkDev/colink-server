@@ -78,6 +78,21 @@ func (h *Hub) SendToDevice(userID string, deviceID string, message any) bool {
 	return true
 }
 
+func (h *Hub) ClientsForUser(userID string, excludeDeviceID string) []*Client {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	userClients := h.clients[userID]
+	clients := make([]*Client, 0, len(userClients))
+	for deviceID, client := range userClients {
+		if deviceID == excludeDeviceID {
+			continue
+		}
+		clients = append(clients, client)
+	}
+	return clients
+}
+
 func (h *Hub) IsOnline(userID string, deviceID string) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()

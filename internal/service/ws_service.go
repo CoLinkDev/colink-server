@@ -118,11 +118,19 @@ func (s *WsService) ConsumeTicket(ticket string) (*WsSession, error) {
 	}, nil
 }
 
+func (s *WsService) ValidateBusinessVersion(version string) error {
+	if version == "" || len(version) > 64 {
+		return pkg.NewAppError(http.StatusBadRequest, pkg.CodeInvalidParameter, "invalid businessVersion")
+	}
+	return nil
+}
+
 func (s *WsService) HandleConnected(client *ws.Client) {
 	s.refreshLastSeen(client.DeviceUUID(), time.Now().UTC(), true)
 	if s.hub.Register(client) {
 		s.broadcastOnline(client)
 	}
+	s.sendOnlineCatchup(client)
 }
 
 func (s *WsService) HandleDisconnect(client *ws.Client) {
@@ -238,11 +246,30 @@ func (s *WsService) broadcastOnline(client *ws.Client) {
 		Type: "device.online",
 		From: &from,
 		Payload: ws.DeviceOnlinePayload{
-			Name: client.DeviceName(),
-			Type: client.DeviceType(),
+			Name:            client.DeviceName(),
+			Type:            client.DeviceType(),
+			BusinessVersion: client.BusinessVersion(),
 		},
 		Timestamp: time.Now().UTC().UnixMilli(),
 	})
+}
+
+func (s *WsService) sendOnlineCatchup(client *ws.Client) {
+	now := time.Now().UTC().UnixMilli()
+	for _, peer := range s.hub.ClientsForUser(client.UserID(), client.DeviceID()) {
+		from := peer.DeviceID()
+		client.Send(ws.MessageEnvelope{
+			ID:   uuid.NewString(),
+			Type: "device.online",
+			From: &from,
+			Payload: ws.DeviceOnlinePayload{
+				Name:            peer.DeviceName(),
+				Type:            peer.DeviceType(),
+				BusinessVersion: peer.BusinessVersion(),
+			},
+			Timestamp: now,
+		})
+	}
 }
 
 func (s *WsService) broadcastOffline(client *ws.Client) {

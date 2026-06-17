@@ -46,6 +46,12 @@ func (h *WsHandler) CreateTicket(c *gin.Context) {
 }
 
 func (h *WsHandler) Connect(c *gin.Context) {
+	businessVersion := c.Query("businessVersion")
+	if err := h.wsService.ValidateBusinessVersion(businessVersion); err != nil {
+		writeError(c, err)
+		return
+	}
+
 	session, err := h.wsService.ConsumeTicket(c.Query("ticket"))
 	if err != nil {
 		writeError(c, err)
@@ -63,6 +69,7 @@ func (h *WsHandler) Connect(c *gin.Context) {
 		session.DeviceID,
 		session.DeviceName,
 		session.DeviceType,
+		businessVersion,
 		h.wsService.HandleMessage,
 		h.wsService.HandleDisconnect,
 	)

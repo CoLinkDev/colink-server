@@ -9,19 +9,20 @@ import (
 )
 
 type Client struct {
-	conn           *websocket.Conn
-	userID         string
-	deviceID       string
-	deviceUUID     uuid.UUID
-	deviceName     string
-	deviceType     string
-	send           chan any
-	process        func(*Client, ClientMessage)
-	onDisconnect   func(*Client)
-	closeOnce      sync.Once
-	disconnectOnce sync.Once
-	stateMu        sync.RWMutex
-	closed         bool
+	conn            *websocket.Conn
+	userID          string
+	deviceID        string
+	deviceUUID      uuid.UUID
+	deviceName      string
+	deviceType      string
+	businessVersion string
+	send            chan any
+	process         func(*Client, ClientMessage)
+	onDisconnect    func(*Client)
+	closeOnce       sync.Once
+	disconnectOnce  sync.Once
+	stateMu         sync.RWMutex
+	closed          bool
 }
 
 func NewClient(
@@ -30,6 +31,7 @@ func NewClient(
 	deviceID string,
 	deviceName string,
 	deviceType string,
+	businessVersion string,
 	process func(*Client, ClientMessage),
 	onDisconnect func(*Client),
 ) (*Client, error) {
@@ -39,15 +41,16 @@ func NewClient(
 	}
 
 	return &Client{
-		conn:         conn,
-		userID:       userID,
-		deviceID:     deviceID,
-		deviceUUID:   deviceUUID,
-		deviceName:   deviceName,
-		deviceType:   deviceType,
-		send:         make(chan any, 32),
-		process:      process,
-		onDisconnect: onDisconnect,
+		conn:            conn,
+		userID:          userID,
+		deviceID:        deviceID,
+		deviceUUID:      deviceUUID,
+		deviceName:      deviceName,
+		deviceType:      deviceType,
+		businessVersion: businessVersion,
+		send:            make(chan any, 32),
+		process:         process,
+		onDisconnect:    onDisconnect,
 	}, nil
 }
 
@@ -134,6 +137,10 @@ func (c *Client) DeviceName() string {
 
 func (c *Client) DeviceType() string {
 	return c.deviceType
+}
+
+func (c *Client) BusinessVersion() string {
+	return c.businessVersion
 }
 
 func (c *Client) handleDisconnect() {
