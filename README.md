@@ -4,10 +4,6 @@ Backend API server, WebSocket relay, and update service for CoLink.
 
 **Tech stack:** Go 1.24 · Gin · GORM · PostgreSQL 16 · Gorilla WebSocket · golang-jwt · Docker
 
-The Docker deployment exposes a single nginx entrypoint. nginx keeps the public API stable and routes `/api/v1/update/*` to the update service while routing the rest of the API, WebSocket traffic, and frontend fallback to the main service. The main service and update service use separate PostgreSQL databases in the same PostgreSQL container.
-
-The main service keeps the SQL migration chain under `migrations/` and applies it on startup. The update service owns a new database and creates only its own update tables there.
-
 ## Development
 
 ```sh
@@ -38,10 +34,8 @@ docker compose up -d --build
 | `SERVER_PORT` | `8080` | HTTP listen port |
 | `DATABASE_HOST` | `localhost` | PostgreSQL host |
 | `DATABASE_PORT` | `5432` | PostgreSQL port |
-| `DATABASE_USER` | `colink` | PostgreSQL user |
-| `DATABASE_PASSWORD` | *(empty)* | PostgreSQL password |
-| `COLINK_MAIN_DB_NAME` | `colink` | Main service database name in Docker |
-| `COLINK_UPDATE_DB_NAME` | `colink_update` | Update service database name in Docker |
+| `DATABASE_USER` | `colink` | PostgreSQL user when running a binary directly |
+| `DATABASE_PASSWORD` | *(empty)* | PostgreSQL password when running a binary directly |
 | `DATABASE_DBNAME` | `colink` | PostgreSQL database name when running a binary directly |
 | `DATABASE_SSLMODE` | `disable` | PostgreSQL SSL mode |
 | `JWT_ACCESS_TTL` | `15m` | Access token TTL |

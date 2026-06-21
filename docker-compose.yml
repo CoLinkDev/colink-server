@@ -11,8 +11,8 @@ x-colink-image: &colink-image
 x-colink-db-env: &colink-db-env
   DATABASE_HOST: postgres
   DATABASE_PORT: 5432
-  DATABASE_USER: ${COLINK_DB_USER:-colink}
-  DATABASE_PASSWORD: ${COLINK_DB_PASSWORD:-colink}
+  DATABASE_USER: colink
+  DATABASE_PASSWORD: colink
   DATABASE_SSLMODE: disable
 
 services:
@@ -20,13 +20,13 @@ services:
     image: postgres:16-alpine
     restart: always
     environment:
-      POSTGRES_USER: ${COLINK_DB_USER:-colink}
-      POSTGRES_PASSWORD: ${COLINK_DB_PASSWORD:?COLINK_DB_PASSWORD is required}
-      POSTGRES_DB: ${COLINK_MAIN_DB_NAME:-${COLINK_DB_NAME:-colink}}
+      POSTGRES_USER: colink
+      POSTGRES_PASSWORD: colink
+      POSTGRES_DB: colink
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${COLINK_DB_USER:-colink} -d ${COLINK_MAIN_DB_NAME:-${COLINK_DB_NAME:-colink}}"]
+      test: ["CMD-SHELL", "pg_isready -U colink -d colink"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -44,7 +44,7 @@ services:
       SERVER_MODE: release
       SERVER_PORT: 8080
       <<: *colink-db-env
-      DATABASE_DBNAME: ${COLINK_MAIN_DB_NAME:-${COLINK_DB_NAME:-colink}}
+      DATABASE_DBNAME: colink
       JWT_SECRET: ${COLINK_JWT_SECRET:?COLINK_JWT_SECRET is required}
       JWT_ACCESS_TTL: ${COLINK_JWT_ACCESS_TTL:-15m}
       JWT_REFRESH_TTL: ${COLINK_JWT_REFRESH_TTL:-720h}
@@ -63,7 +63,7 @@ services:
       SERVER_MODE: release
       SERVER_PORT: 8081
       <<: *colink-db-env
-      DATABASE_DBNAME: ${COLINK_UPDATE_DB_NAME:-colink_update}
+      DATABASE_DBNAME: colink_update
       UPDATE_CHECK_INTERVAL: ${COLINK_UPDATE_CHECK_INTERVAL:-30m}
       UPDATE_STORAGE_PATH: /app/data/updates
       UPDATE_GITHUB_TOKEN: ${COLINK_GITHUB_TOKEN:-}
