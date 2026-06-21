@@ -148,13 +148,17 @@ func Load() (*Config, error) {
 }
 
 func (c DatabaseConfig) DSN() string {
+	return c.DSNForDatabase(c.DBName)
+}
+
+func (c DatabaseConfig) DSNForDatabase(databaseName string) string {
 	return fmt.Sprintf(
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s TimeZone=UTC",
 		c.Host,
 		c.Port,
 		c.User,
 		c.Password,
-		c.DBName,
+		databaseName,
 		c.SSLMode,
 	)
 }

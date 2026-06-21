@@ -1,8 +1,12 @@
 # CoLink Server
 
-Backend API server and WebSocket relay for CoLink.
+Backend API server, WebSocket relay, and update service for CoLink.
 
 **Tech stack:** Go 1.24 · Gin · GORM · PostgreSQL 16 · Gorilla WebSocket · golang-jwt · Docker
+
+The Docker deployment exposes a single nginx entrypoint. nginx keeps the public API stable and routes `/api/v1/update/*` to the update service while routing the rest of the API, WebSocket traffic, and frontend fallback to the main service. The main service and update service use separate PostgreSQL databases in the same PostgreSQL container.
+
+The main service keeps the SQL migration chain under `migrations/` and applies it on startup. The update service owns a new database and creates only its own update tables there.
 
 ## Development
 
@@ -36,12 +40,25 @@ docker compose up -d --build
 | `DATABASE_PORT` | `5432` | PostgreSQL port |
 | `DATABASE_USER` | `colink` | PostgreSQL user |
 | `DATABASE_PASSWORD` | *(empty)* | PostgreSQL password |
-| `DATABASE_DBNAME` | `colink` | PostgreSQL database name |
+| `COLINK_MAIN_DB_NAME` | `colink` | Main service database name in Docker |
+| `COLINK_UPDATE_DB_NAME` | `colink_update` | Update service database name in Docker |
+| `DATABASE_DBNAME` | `colink` | PostgreSQL database name when running a binary directly |
 | `DATABASE_SSLMODE` | `disable` | PostgreSQL SSL mode |
 | `JWT_ACCESS_TTL` | `15m` | Access token TTL |
 | `JWT_REFRESH_TTL` | `720h` | Refresh token TTL |
 | `WS_TICKET_TTL` | `30s` | WebSocket ticket TTL |
 | `UPDATE_CHECK_INTERVAL` | `30m` | GitHub release check interval |
 | `UPDATE_STORAGE_PATH` | `./data/updates` | Update asset storage path |
+| `UPDATE_GITHUB_TOKEN` | *(empty)* | Optional GitHub token for release checks and asset downloads |
+| `UPDATE_GITHUB_REPOS` | *(empty)* | Comma-separated `owner:repo:platform` release sources |
+
+## Services
+
+| Service | Responsibility |
+|---|---|
+| `nginx` | Public entrypoint and path routing |
+| `server` | Auth, account, device API, WebSocket tickets, WebSocket relay, frontend fallback |
+| `update` | GitHub release checks, cached update metadata, update asset downloads |
+| `postgres` | PostgreSQL storage |
 
 The server does not persist messages, files, or clipboard content — it only relays WebSocket frames between authenticated devices belonging to the same user.

@@ -12,7 +12,49 @@ import (
 	"colink-server/internal/ws"
 )
 
+func NewMainRouter(cfg *config.Config, db *gorm.DB, log *zap.Logger) *gin.Engine {
+	userRepo := repository.NewUserRepository(db)
+	deviceRepo := repository.NewDeviceRepository(db)
+	tokenRepo := repository.NewTokenRepository(db)
+	ticketRepo := repository.NewTicketRepository(db)
+	hub := ws.NewHub()
+
+	authService := service.NewAuthService(
+		db,
+		userRepo,
+		tokenRepo,
+		cfg.JWT.Secret,
+		cfg.JWT.AccessTTL,
+		cfg.JWT.RefreshTTL,
+	)
+	deviceService := service.NewDeviceService(deviceRepo, hub)
+	wsService := service.NewWsService(deviceRepo, ticketRepo, hub, cfg.WS.TicketTTL)
+
+	authHandler := NewAuthHandler(authService)
+	deviceHandler := NewDeviceHandler(deviceService)
+	meHandler := NewMeHandler(authService)
+	wsHandler := NewWsHandler(wsService)
+	authMiddleware := middleware.NewAuthMiddleware(cfg.JWT.Secret)
+
+	router := newBaseRouter(log)
+	registerMainRoutes(router, authHandler, deviceHandler, meHandler, wsHandler, authMiddleware)
+	serveFrontend(router)
+	return router
+}
+
+func NewUpdateRouter(cfg *config.Config, db *gorm.DB, log *zap.Logger) (*gin.Engine, *service.UpdateService) {
+	releaseRepo := repository.NewReleaseRepository(db)
+	updateService := service.NewUpdateService(releaseRepo, cfg.Update, log)
+	updateHandler := NewUpdateHandler(updateService)
+
+	router := newBaseRouter(log)
+	registerUpdateRoutes(router, updateHandler)
+	return router, updateService
+}
+
 func NewRouter(cfg *config.Config, db *gorm.DB, log *zap.Logger) (*gin.Engine, *service.UpdateService) {
+	router := newBaseRouter(log)
+
 	userRepo := repository.NewUserRepository(db)
 	deviceRepo := repository.NewDeviceRepository(db)
 	tokenRepo := repository.NewTokenRepository(db)
@@ -39,11 +81,31 @@ func NewRouter(cfg *config.Config, db *gorm.DB, log *zap.Logger) (*gin.Engine, *
 	updateHandler := NewUpdateHandler(updateService)
 	authMiddleware := middleware.NewAuthMiddleware(cfg.JWT.Secret)
 
+	registerMainRoutes(router, authHandler, deviceHandler, meHandler, wsHandler, authMiddleware)
+	registerUpdateRoutes(router, updateHandler)
+	serveFrontend(router)
+	return router, updateService
+}
+
+func newBaseRouter(log *zap.Logger) *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(middleware.CORS())
 	router.Use(middleware.Logger(log))
+	router.GET("/healthz", func(c *gin.Context) {
+		c.Status(204)
+	})
+	return router
+}
 
+func registerMainRoutes(
+	router *gin.Engine,
+	authHandler *AuthHandler,
+	deviceHandler *DeviceHandler,
+	meHandler *MeHandler,
+	wsHandler *WsHandler,
+	authMiddleware *middleware.AuthMiddleware,
+) {
 	api := router.Group("/api")
 	v1 := api.Group("/v1")
 
@@ -69,11 +131,14 @@ func NewRouter(cfg *config.Config, db *gorm.DB, log *zap.Logger) (*gin.Engine, *
 	wsGroup.Use(authMiddleware.RequireAuth())
 	wsGroup.POST("/ticket", wsHandler.CreateTicket)
 
+	router.GET("/ws/v1", wsHandler.Connect)
+}
+
+func registerUpdateRoutes(router *gin.Engine, updateHandler *UpdateHandler) {
+	api := router.Group("/api")
+	v1 := api.Group("/v1")
+
 	update := v1.Group("/update")
 	update.GET("/check", updateHandler.CheckUpdate)
 	update.GET("/download/:platform/:version/:filename", updateHandler.DownloadAsset)
-
-	router.GET("/ws/v1", wsHandler.Connect)
-	serveFrontend(router)
-	return router, updateService
 }

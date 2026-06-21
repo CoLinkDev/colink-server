@@ -15,18 +15,13 @@ import (
 	"colink-server/internal/app"
 	"colink-server/internal/config"
 	"colink-server/internal/handler"
-	"colink-server/internal/janitor"
-	"colink-server/internal/repository"
+	"colink-server/internal/worker"
 )
 
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		panic(err)
-	}
-
-	if cfg.JWT.Secret == "" {
-		panic("jwt.secret is required")
 	}
 
 	gin.SetMode(cfg.Server.Mode)
@@ -49,18 +44,17 @@ func main() {
 		log.Fatal("open sql database", zap.Error(err))
 	}
 
-	if err := app.RunMainMigrations(sqlDB, cfg); err != nil {
-		log.Fatal("run main migrations", zap.Error(err))
+	if err := app.EnsureUpdateSchema(db); err != nil {
+		log.Fatal("ensure update schema", zap.Error(err))
 	}
 
-	router := handler.NewMainRouter(cfg, db, log)
+	router, updateService := handler.NewUpdateRouter(cfg, db, log)
 	bgCtx, stopBackground := context.WithCancel(context.Background())
 	defer stopBackground()
 
-	go janitor.New(
-		repository.NewTokenRepository(db),
-		repository.NewTicketRepository(db),
-		time.Hour,
+	go worker.NewUpdateChecker(
+		updateService,
+		cfg.Update.CheckInterval,
 		log,
 	).Run(bgCtx)
 
@@ -71,9 +65,9 @@ func main() {
 	}
 
 	go func() {
-		log.Info("server started", zap.Int("port", cfg.Server.Port), zap.String("mode", cfg.Server.Mode))
+		log.Info("update server started", zap.Int("port", cfg.Server.Port), zap.String("mode", cfg.Server.Mode))
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatal("listen server", zap.Error(err))
+			log.Fatal("listen update server", zap.Error(err))
 		}
 	}()
 
@@ -86,7 +80,7 @@ func main() {
 	stopBackground()
 
 	if err := server.Shutdown(ctx); err != nil {
-		log.Error("shutdown server", zap.Error(err))
+		log.Error("shutdown update server", zap.Error(err))
 	}
 
 	if err := app.CloseDatabase(sqlDB); err != nil {

@@ -21,9 +21,9 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
+	"colink-server/internal/app"
 	"colink-server/internal/config"
 	"colink-server/internal/handler"
-	"colink-server/internal/migration"
 )
 
 type testApp struct {
@@ -269,11 +269,6 @@ func newTestApp(t *testing.T, ticketTTL time.Duration) *testApp {
 		t.Fatalf("open sql database: %v", err)
 	}
 
-	resetDatabase(t, sqlDB)
-	if err := migration.Up(sqlDB, dbName); err != nil {
-		t.Fatalf("run migrations: %v", err)
-	}
-
 	cfg := &config.Config{
 		Server: config.ServerConfig{Mode: gin.TestMode},
 		Database: config.DatabaseConfig{
@@ -289,7 +284,12 @@ func newTestApp(t *testing.T, ticketTTL time.Duration) *testApp {
 		},
 	}
 
-	router, _ := handler.NewRouter(cfg, db, zap.NewNop())
+	resetDatabase(t, sqlDB)
+	if err := app.RunMainMigrations(sqlDB, cfg); err != nil {
+		t.Fatalf("run main migrations: %v", err)
+	}
+
+	router := handler.NewMainRouter(cfg, db, zap.NewNop())
 	server := httptest.NewServer(router)
 	return &testApp{cfg: cfg, db: db, sqlDB: sqlDB, server: server}
 }

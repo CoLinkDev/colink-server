@@ -12,6 +12,6 @@ type WsTicket struct {
 	DeviceID  uuid.UUID `gorm:"type:uuid;not null"`
 	Ticket    string    `gorm:"size:128;not null;uniqueIndex:idx_ws_tickets_ticket"`
 	Consumed  bool      `gorm:"not null;default:false"`
-	ExpiresAt time.Time `gorm:"not null"`
+	ExpiresAt time.Time `gorm:"not null;index:idx_ws_tickets_expires_at"`
 	CreatedAt time.Time `gorm:"not null;default:now()"`
 }
