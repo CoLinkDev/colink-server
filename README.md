@@ -21,6 +21,9 @@ Note: when the same variable exists in both the terminal environment and the `.e
 ## Production
 
 ```sh
+# Get a Github token at https://github.com/settings/personal-access-tokens, remember to enable the read:packages permission for this token
+# `docker login ghcr.io` via this token
+
 mkdir -p colink-server/deploy/nginx
 cd colink-server
 
@@ -29,7 +32,9 @@ curl -fsSLO https://raw.githubusercontent.com/CoLinkDev/colink-server/master/doc
 curl -fsSLo deploy/nginx/default.conf https://raw.githubusercontent.com/CoLinkDev/colink-server/master/deploy/nginx/default.conf
 
 cp .env.example .env
+
 # Edit .env and fill in required variables
+
 docker compose pull
 docker compose up -d
 ```
