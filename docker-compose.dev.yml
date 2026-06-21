@@ -1,5 +1,5 @@
 x-colink-image: &colink-image
-  image: ${COLINK_SERVER_IMAGE:-colink-server:dev}
+  image: colink-server:dev
   build:
     context: .
     dockerfile: Dockerfile
@@ -58,6 +58,8 @@ services:
     <<: *colink-image
     command: ["colink-update-server"]
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy

@@ -1,12 +1,5 @@
 x-colink-image: &colink-image
-  image: ${COLINK_SERVER_IMAGE:-colink-server:latest}
-  build:
-    context: .
-    dockerfile: Dockerfile
-    args:
-      HTTP_PROXY: ${COLINK_HTTP_PROXY:-}
-      HTTPS_PROXY: ${COLINK_HTTPS_PROXY:-}
-      NO_PROXY: ${COLINK_NO_PROXY:-localhost,127.0.0.1,postgres}
+  image: ghcr.io/colinkdev/colink-server:latest
 
 x-colink-db-env: &colink-db-env
   DATABASE_HOST: postgres
@@ -56,6 +49,8 @@ services:
     <<: *colink-image
     command: ["colink-update-server"]
     restart: always
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy

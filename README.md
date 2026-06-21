@@ -21,8 +21,17 @@ Note: when the same variable exists in both the terminal environment and the `.e
 ## Production
 
 ```sh
-cp .env.example .env   # fill in required variables
-docker compose up -d --build
+mkdir -p colink-server/deploy/nginx
+cd colink-server
+
+curl -fsSLO https://raw.githubusercontent.com/CoLinkDev/colink-server/master/.env.example
+curl -fsSLO https://raw.githubusercontent.com/CoLinkDev/colink-server/master/docker-compose.yml
+curl -fsSLo deploy/nginx/default.conf https://raw.githubusercontent.com/CoLinkDev/colink-server/master/deploy/nginx/default.conf
+
+cp .env.example .env
+# Edit .env and fill in required variables
+docker compose pull
+docker compose up -d
 ```
 
 ## Environment Variables
