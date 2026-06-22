@@ -45,7 +45,7 @@ docker compose up -d
 |---|---|---|
 | `JWT_SECRET` | **required** | HS256 signing secret |
 | `SERVER_MODE` | `debug` | Gin mode (`debug` / `release`) |
-| `SERVER_PORT` | `8080` | HTTP listen port |
+| `SERVER_PORT` | `37777` | HTTP listen port |
 | `DATABASE_HOST` | `localhost` | PostgreSQL host |
 | `DATABASE_PORT` | `5432` | PostgreSQL port |
 | `DATABASE_USER` | `colink` | PostgreSQL user when running a binary directly |
