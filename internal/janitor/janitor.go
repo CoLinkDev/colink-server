@@ -49,6 +49,9 @@ func (j *Janitor) Run(ctx context.Context) {
 func (j *Janitor) cleanup() {
 	now := time.Now().UTC()
 
+	if err := j.tokenRepo.ExpireReusableTokens(now); err != nil {
+		j.log.Warn("expire refresh token reuse windows", zap.Error(err))
+	}
 	if err := j.tokenRepo.DeleteExpired(now); err != nil {
 		j.log.Warn("cleanup refresh tokens", zap.Error(err))
 	}

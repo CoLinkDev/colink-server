@@ -52,7 +52,7 @@ docker compose up -d
 | `DATABASE_PASSWORD` | *(empty)* | PostgreSQL password when running a binary directly |
 | `DATABASE_DBNAME` | `colink` | PostgreSQL database name when running a binary directly |
 | `DATABASE_SSLMODE` | `disable` | PostgreSQL SSL mode |
-| `JWT_ACCESS_TTL` | `15m` | Access token TTL |
+| `JWT_ACCESS_TTL` | `72h` | Access token TTL |
 | `JWT_REFRESH_TTL` | `720h` | Refresh token TTL |
 | `WS_TICKET_TTL` | `30s` | WebSocket ticket TTL |
 | `UPDATE_CHECK_INTERVAL` | `30m` | GitHub release check interval |

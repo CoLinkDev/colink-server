@@ -121,7 +121,7 @@ func Load() (*Config, error) {
 		},
 		JWT: JWTConfig{
 			Secret:     env("JWT_SECRET", ""),
-			AccessTTL:  envDuration("JWT_ACCESS_TTL", 15*time.Minute),
+			AccessTTL:  envDuration("JWT_ACCESS_TTL", 72*time.Hour),
 			RefreshTTL: envDuration("JWT_REFRESH_TTL", 30*24*time.Hour),
 		},
 		WS: WSConfig{

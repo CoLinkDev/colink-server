@@ -40,14 +40,18 @@ type envelope[T any] struct {
 }
 
 type authResult struct {
-	UserID       string `json:"userId"`
-	Token        string `json:"token"`
-	RefreshToken string `json:"refreshToken"`
+	UserID           string `json:"userId"`
+	Token            string `json:"token"`
+	RefreshToken     string `json:"refreshToken"`
+	ExpiresIn        int64  `json:"expiresIn"`
+	RefreshExpiresIn int64  `json:"refreshExpiresIn"`
 }
 
 type refreshResult struct {
-	Token        string `json:"token"`
-	RefreshToken string `json:"refreshToken"`
+	Token            string `json:"token"`
+	RefreshToken     string `json:"refreshToken"`
+	ExpiresIn        int64  `json:"expiresIn"`
+	RefreshExpiresIn int64  `json:"refreshExpiresIn"`
 }
 
 type registerDeviceResult struct {
@@ -87,6 +91,16 @@ func TestAuthFlow(t *testing.T) {
 	refreshed := decodeOK[refreshResult](t, app.request(http.MethodPost, "/api/v1/auth/refresh", "", map[string]string{
 		"refreshToken": login.RefreshToken,
 	}))
+	if refreshed.ExpiresIn <= 0 || refreshed.RefreshExpiresIn <= 0 {
+		t.Fatalf("expected positive token TTLs, got access=%d refresh=%d", refreshed.ExpiresIn, refreshed.RefreshExpiresIn)
+	}
+
+	replayed := decodeOK[refreshResult](t, app.request(http.MethodPost, "/api/v1/auth/refresh", "", map[string]string{
+		"refreshToken": login.RefreshToken,
+	}))
+	if replayed.Token != refreshed.Token || replayed.RefreshToken != refreshed.RefreshToken {
+		t.Fatal("expected refresh token replay to return the original refresh result")
+	}
 
 	expectStatus(t, app.request(http.MethodPost, "/api/v1/auth/change-password", bearer(refreshed.Token), map[string]string{
 		"oldPassword": "password123",

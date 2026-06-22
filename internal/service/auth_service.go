@@ -15,14 +15,18 @@ import (
 )
 
 type AuthResult struct {
-	UserID       string `json:"userId"`
-	Token        string `json:"token"`
-	RefreshToken string `json:"refreshToken"`
+	UserID           string `json:"userId"`
+	Token            string `json:"token"`
+	RefreshToken     string `json:"refreshToken"`
+	ExpiresIn        int64  `json:"expiresIn"`
+	RefreshExpiresIn int64  `json:"refreshExpiresIn"`
 }
 
 type RefreshResult struct {
-	Token        string `json:"token"`
-	RefreshToken string `json:"refreshToken"`
+	Token            string `json:"token"`
+	RefreshToken     string `json:"refreshToken"`
+	ExpiresIn        int64  `json:"expiresIn"`
+	RefreshExpiresIn int64  `json:"refreshExpiresIn"`
 }
 
 type MeResult struct {
@@ -40,6 +44,8 @@ type AuthService struct {
 	accessTTL  time.Duration
 	refreshTTL time.Duration
 }
+
+const refreshTokenReuseWindow = 5 * time.Minute
 
 func NewAuthService(
 	db *gorm.DB,
@@ -100,9 +106,11 @@ func (s *AuthService) Register(email string, username string, password string) (
 		}
 
 		result = AuthResult{
-			UserID:       user.ID.String(),
-			Token:        session.Token,
-			RefreshToken: session.RefreshToken,
+			UserID:           user.ID.String(),
+			Token:            session.Token,
+			RefreshToken:     session.RefreshToken,
+			ExpiresIn:        durationSecondsUntil(time.Now().UTC(), session.AccessExpiresAt),
+			RefreshExpiresIn: durationSecondsUntil(time.Now().UTC(), session.RefreshExpiresAt),
 		}
 		return nil
 	})
@@ -131,33 +139,54 @@ func (s *AuthService) Login(identifier string, password string) (*AuthResult, er
 	}
 
 	return &AuthResult{
-		UserID:       user.ID.String(),
-		Token:        session.Token,
-		RefreshToken: session.RefreshToken,
+		UserID:           user.ID.String(),
+		Token:            session.Token,
+		RefreshToken:     session.RefreshToken,
+		ExpiresIn:        durationSecondsUntil(time.Now().UTC(), session.AccessExpiresAt),
+		RefreshExpiresIn: durationSecondsUntil(time.Now().UTC(), session.RefreshExpiresAt),
 	}, nil
 }
 
 func (s *AuthService) Refresh(refreshToken string) (*RefreshResult, error) {
 	tokenHash := pkg.HashToken(refreshToken)
-	tokenRecord, err := s.tokenRepo.FindByTokenHash(tokenHash)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, pkg.NewAppError(http.StatusUnauthorized, pkg.CodeInvalidRefreshToken, "invalid refresh token")
-		}
-		return nil, pkg.InternalError(err)
-	}
-	if tokenRecord.Revoked {
-		return nil, pkg.NewAppError(http.StatusUnauthorized, pkg.CodeRefreshTokenRevoked, "token revoked")
-	}
-	if !tokenRecord.ExpiresAt.After(time.Now().UTC()) {
-		return nil, pkg.NewAppError(http.StatusUnauthorized, pkg.CodeInvalidRefreshToken, "invalid refresh token")
-	}
 
 	var result RefreshResult
-	err = s.db.Transaction(func(tx *gorm.DB) error {
+	err := s.db.Transaction(func(tx *gorm.DB) error {
 		tokenRepo := s.tokenRepo.WithTx(tx)
-		if err := tokenRepo.RevokeByTokenHash(tokenHash); err != nil {
+		tokenRecord, err := tokenRepo.FindByTokenHashForUpdate(tokenHash)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return pkg.NewAppError(http.StatusUnauthorized, pkg.CodeInvalidRefreshToken, "invalid refresh token")
+			}
 			return pkg.InternalError(err)
+		}
+
+		now := time.Now().UTC()
+		if tokenRecord.Revoked {
+			return pkg.NewAppError(http.StatusUnauthorized, pkg.CodeRefreshTokenRevoked, "token revoked")
+		}
+		if !tokenRecord.ExpiresAt.After(now) {
+			return pkg.NewAppError(http.StatusUnauthorized, pkg.CodeInvalidRefreshToken, "invalid refresh token")
+		}
+		if tokenRecord.RotatedAt != nil {
+			if tokenRecord.ReuseExpiresAt != nil &&
+				tokenRecord.ReuseExpiresAt.After(now) &&
+				tokenRecord.ReplacementAccessToken != nil &&
+				tokenRecord.ReplacementRefreshToken != nil &&
+				tokenRecord.ReplacementAccessExpiresAt != nil &&
+				tokenRecord.ReplacementRefreshExpiresAt != nil {
+				result = RefreshResult{
+					Token:            *tokenRecord.ReplacementAccessToken,
+					RefreshToken:     *tokenRecord.ReplacementRefreshToken,
+					ExpiresIn:        durationSecondsUntil(now, *tokenRecord.ReplacementAccessExpiresAt),
+					RefreshExpiresIn: durationSecondsUntil(now, *tokenRecord.ReplacementRefreshExpiresAt),
+				}
+				return nil
+			}
+			if err := tokenRepo.ExpireReuseByTokenHash(tokenHash); err != nil {
+				return pkg.InternalError(err)
+			}
+			return pkg.NewAppError(http.StatusUnauthorized, pkg.CodeRefreshTokenRevoked, "token revoked")
 		}
 
 		session, err := s.issueSession(tokenRepo, tokenRecord.UserID)
@@ -165,9 +194,23 @@ func (s *AuthService) Refresh(refreshToken string) (*RefreshResult, error) {
 			return err
 		}
 
+		if err := tokenRepo.MarkReused(
+			tokenHash,
+			now,
+			now.Add(refreshTokenReuseWindow),
+			session.Token,
+			session.RefreshToken,
+			session.AccessExpiresAt,
+			session.RefreshExpiresAt,
+		); err != nil {
+			return pkg.InternalError(err)
+		}
+
 		result = RefreshResult{
-			Token:        session.Token,
-			RefreshToken: session.RefreshToken,
+			Token:            session.Token,
+			RefreshToken:     session.RefreshToken,
+			ExpiresIn:        durationSecondsUntil(now, session.AccessExpiresAt),
+			RefreshExpiresIn: durationSecondsUntil(now, session.RefreshExpiresAt),
 		}
 		return nil
 	})
@@ -196,7 +239,7 @@ func (s *AuthService) Logout(userID string, refreshToken string) error {
 		return pkg.NewAppError(http.StatusUnauthorized, pkg.CodeInvalidRefreshToken, "invalid refresh token")
 	}
 
-	if err := s.tokenRepo.RevokeByTokenHash(tokenHash); err != nil {
+	if err := s.tokenRepo.RevokeByTokenHashOrReplacementRefreshToken(tokenHash, refreshToken); err != nil {
 		return pkg.InternalError(err)
 	}
 
@@ -322,11 +365,17 @@ func (s *AuthService) findUserByIdentifier(identifier string) (*model.User, erro
 }
 
 type issuedSession struct {
-	Token        string
-	RefreshToken string
+	Token            string
+	RefreshToken     string
+	AccessExpiresAt  time.Time
+	RefreshExpiresAt time.Time
 }
 
 func (s *AuthService) issueSession(tokenRepo *repository.TokenRepository, userID uuid.UUID) (*issuedSession, error) {
+	now := time.Now().UTC()
+	accessExpiresAt := now.Add(s.accessTTL)
+	refreshExpiresAt := now.Add(s.refreshTTL)
+
 	token, err := pkg.GenerateAccessToken(s.jwtSecret, userID.String(), s.accessTTL)
 	if err != nil {
 		return nil, pkg.InternalError(err)
@@ -340,16 +389,26 @@ func (s *AuthService) issueSession(tokenRepo *repository.TokenRepository, userID
 	record := &model.RefreshToken{
 		UserID:    userID,
 		TokenHash: pkg.HashToken(refreshToken),
-		ExpiresAt: time.Now().UTC().Add(s.refreshTTL),
+		ExpiresAt: refreshExpiresAt,
 	}
 	if err := tokenRepo.Create(record); err != nil {
 		return nil, pkg.InternalError(err)
 	}
 
 	return &issuedSession{
-		Token:        token,
-		RefreshToken: refreshToken,
+		Token:            token,
+		RefreshToken:     refreshToken,
+		AccessExpiresAt:  accessExpiresAt,
+		RefreshExpiresAt: refreshExpiresAt,
 	}, nil
+}
+
+func durationSecondsUntil(now time.Time, expiresAt time.Time) int64 {
+	duration := expiresAt.Sub(now)
+	if duration <= 0 {
+		return 0
+	}
+	return int64((duration + time.Second - 1) / time.Second)
 }
 
 func mapUserUniqueViolation(err error) *pkg.AppError {

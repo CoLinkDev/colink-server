@@ -48,7 +48,7 @@ services:
       <<: *colink-db-env
       DATABASE_DBNAME: colink
       JWT_SECRET: ${COLINK_JWT_SECRET:-dev-jwt-secret}
-      JWT_ACCESS_TTL: ${COLINK_JWT_ACCESS_TTL:-15m}
+      JWT_ACCESS_TTL: ${COLINK_JWT_ACCESS_TTL:-72h}
       JWT_REFRESH_TTL: ${COLINK_JWT_REFRESH_TTL:-720h}
       WS_TICKET_TTL: ${COLINK_WS_TICKET_TTL:-30s}
     networks:
