@@ -54,6 +54,12 @@ type refreshResult struct {
 	RefreshExpiresIn int64  `json:"refreshExpiresIn"`
 }
 
+type meResult struct {
+	UserID   string `json:"userId"`
+	Email    string `json:"email"`
+	Username string `json:"username"`
+}
+
 type registerDeviceResult struct {
 	DeviceID string `json:"deviceId"`
 }
@@ -87,6 +93,29 @@ func TestAuthFlow(t *testing.T) {
 		"identifier": "alice",
 		"password":   "password123",
 	}))
+
+	me := decodeOK[meResult](t, app.request(http.MethodGet, "/api/v1/me", bearer(login.Token), nil))
+	if me.UserID != register.UserID || me.Email != "alice@example.com" || me.Username != "alice" {
+		t.Fatalf("unexpected profile: %+v", me)
+	}
+
+	expectStatus(t, app.request(http.MethodPut, "/api/v1/me/username", bearer(login.Token), map[string]string{
+		"username": "alice-updated",
+	}), http.StatusOK)
+
+	me = decodeOK[meResult](t, app.request(http.MethodGet, "/api/v1/me", bearer(login.Token), nil))
+	if me.UserID != register.UserID || me.Email != "alice@example.com" || me.Username != "alice-updated" {
+		t.Fatalf("profile did not reflect username update: %+v", me)
+	}
+
+	decodeOK[authResult](t, app.request(http.MethodPost, "/api/v1/auth/register", "", map[string]string{
+		"email":    "taken@example.com",
+		"username": "taken-name",
+		"password": "password123",
+	}))
+	expectStatus(t, app.request(http.MethodPut, "/api/v1/me/username", bearer(login.Token), map[string]string{
+		"username": "taken-name",
+	}), http.StatusConflict)
 
 	refreshed := decodeOK[refreshResult](t, app.request(http.MethodPost, "/api/v1/auth/refresh", "", map[string]string{
 		"refreshToken": login.RefreshToken,
