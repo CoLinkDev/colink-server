@@ -141,7 +141,7 @@ func TestAuthFlow(t *testing.T) {
 	}), http.StatusOK)
 
 	expectStatus(t, app.request(http.MethodPost, "/api/v1/auth/login", "", map[string]string{
-		"identifier": "alice",
+		"identifier": "alice-updated",
 		"password":   "password123",
 	}), http.StatusUnauthorized)
 
