@@ -9,11 +9,12 @@ x-colink-image: &colink-image
       NO_PROXY: ${COLINK_NO_PROXY:-localhost,127.0.0.1,postgres}
 
 x-colink-db-env: &colink-db-env
-  DATABASE_HOST: postgres
-  DATABASE_PORT: 5432
-  DATABASE_USER: colink
-  DATABASE_PASSWORD: colink
-  DATABASE_SSLMODE: disable
+  COLINK_DATABASE_HOST: postgres
+  COLINK_DATABASE_PORT: 5432
+  COLINK_DATABASE_USER: colink
+  COLINK_DATABASE_PASSWORD: colink
+  COLINK_DATABASE_SSLMODE: disable
+  COLINK_DATABASE_CONNECT_TIMEOUT: 2m
 
 services:
   postgres:
@@ -43,14 +44,14 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      SERVER_MODE: debug
-      SERVER_PORT: 8080
+      COLINK_SERVER_MODE: debug
+      COLINK_SERVER_PORT: 8080
       <<: *colink-db-env
-      DATABASE_DBNAME: colink
-      JWT_SECRET: ${COLINK_JWT_SECRET:-dev-jwt-secret}
-      JWT_ACCESS_TTL: ${COLINK_JWT_ACCESS_TTL:-72h}
-      JWT_REFRESH_TTL: ${COLINK_JWT_REFRESH_TTL:-720h}
-      WS_TICKET_TTL: ${COLINK_WS_TICKET_TTL:-30s}
+      COLINK_DATABASE_DBNAME: colink
+      COLINK_JWT_SECRET: ${COLINK_JWT_SECRET:-dev-jwt-secret}
+      COLINK_JWT_ACCESS_TTL: ${COLINK_JWT_ACCESS_TTL:-72h}
+      COLINK_JWT_REFRESH_TTL: ${COLINK_JWT_REFRESH_TTL:-720h}
+      COLINK_WS_TICKET_TTL: ${COLINK_WS_TICKET_TTL:-30s}
     networks:
       - colink
 
@@ -64,17 +65,17 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      SERVER_MODE: debug
-      SERVER_PORT: 8081
+      COLINK_SERVER_MODE: debug
+      COLINK_SERVER_PORT: 8081
       <<: *colink-db-env
-      DATABASE_DBNAME: colink_update
-      UPDATE_CHECK_INTERVAL: ${COLINK_UPDATE_CHECK_INTERVAL:-30m}
-      UPDATE_STORAGE_PATH: /app/data/updates
-      UPDATE_GITHUB_TOKEN: ${COLINK_GITHUB_TOKEN:-}
-      UPDATE_GITHUB_REPOS: ${COLINK_GITHUB_REPOS:-CoLinkDev:colink-android:android,CoLinkDev:colink-desktop:windows}
-      HTTP_PROXY: ${COLINK_HTTP_PROXY:-}
-      HTTPS_PROXY: ${COLINK_HTTPS_PROXY:-}
-      NO_PROXY: ${COLINK_NO_PROXY:-localhost,127.0.0.1,postgres,server,update}
+      COLINK_DATABASE_DBNAME: colink_update
+      COLINK_UPDATE_CHECK_INTERVAL: ${COLINK_UPDATE_CHECK_INTERVAL:-30m}
+      COLINK_UPDATE_STORAGE_PATH: /app/data/updates
+      COLINK_UPDATE_GITHUB_TOKEN: ${COLINK_UPDATE_GITHUB_TOKEN:-}
+      COLINK_UPDATE_GITHUB_REPOS: ${COLINK_UPDATE_GITHUB_REPOS:-CoLinkDev:colink-android:android,CoLinkDev:colink-desktop:windows}
+      COLINK_HTTP_PROXY: ${COLINK_HTTP_PROXY:-}
+      COLINK_HTTPS_PROXY: ${COLINK_HTTPS_PROXY:-}
+      COLINK_NO_PROXY: ${COLINK_NO_PROXY:-localhost,127.0.0.1,postgres,server,update}
     volumes:
       - update-data:/app/data/updates
     networks:
@@ -87,7 +88,7 @@ services:
       - server
       - update
     ports:
-      - "${COLINK_SERVER_PORT:-37777}:80"
+      - "${COLINK_PUBLIC_PORT:-37777}:80"
     volumes:
       - ./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     networks:

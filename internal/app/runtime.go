@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -25,6 +26,24 @@ func NewLogger(mode string) (*zap.Logger, error) {
 }
 
 func OpenDatabase(cfg *config.Config) (*gorm.DB, error) {
+	deadline := time.Now().Add(cfg.Database.ConnectTimeout)
+	var lastErr error
+
+	for {
+		db, err := openDatabase(cfg)
+		if err == nil {
+			return db, nil
+		}
+		lastErr = err
+
+		if cfg.Database.ConnectTimeout <= 0 || time.Now().Add(time.Second).After(deadline) {
+			return nil, lastErr
+		}
+		time.Sleep(time.Second)
+	}
+}
+
+func openDatabase(cfg *config.Config) (*gorm.DB, error) {
 	gormLogger := logger.Default.LogMode(logger.Warn)
 	if cfg.Server.Mode != gin.ReleaseMode {
 		gormLogger = logger.Default.LogMode(logger.Info)

@@ -74,7 +74,7 @@ func NewUpdateService(releaseRepo *repository.ReleaseRepository, cfg config.Upda
 		releaseRepo: releaseRepo,
 		cfg:         cfg,
 		log:         log,
-		httpClient:  newGitHubHTTPClient(),
+		httpClient:  newGitHubHTTPClient(cfg.Proxy),
 	}
 }
 
@@ -430,10 +430,51 @@ func cleanAssetFileName(name string) (string, error) {
 	return fileName, nil
 }
 
-func newGitHubHTTPClient() *http.Client {
+func newGitHubHTTPClient(proxy config.ProxyConfig) *http.Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = proxyFunc(proxy)
 	return &http.Client{
 		Transport: transport,
 		Timeout:   10 * time.Minute,
 	}
+}
+
+func proxyFunc(proxy config.ProxyConfig) func(*http.Request) (*url.URL, error) {
+	return func(req *http.Request) (*url.URL, error) {
+		if req.URL == nil || proxyBypass(req.URL.Hostname(), proxy.NoProxy) {
+			return nil, nil
+		}
+
+		proxyURL := proxy.HTTP
+		if req.URL.Scheme == "https" && strings.TrimSpace(proxy.HTTPS) != "" {
+			proxyURL = proxy.HTTPS
+		}
+		if strings.TrimSpace(proxyURL) == "" {
+			return nil, nil
+		}
+		return url.Parse(proxyURL)
+	}
+}
+
+func proxyBypass(host string, noProxy string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if host == "" {
+		return false
+	}
+	for _, entry := range strings.Split(noProxy, ",") {
+		entry = strings.ToLower(strings.TrimSpace(entry))
+		if entry == "" {
+			continue
+		}
+		if entry == "*" || entry == host {
+			return true
+		}
+		if strings.HasPrefix(entry, ".") && strings.HasSuffix(host, entry) {
+			return true
+		}
+		if strings.HasPrefix(host, entry+".") {
+			return true
+		}
+	}
+	return false
 }

@@ -41,24 +41,7 @@ docker compose up -d
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|---|---|---|
-| `JWT_SECRET` | **required** | HS256 signing secret |
-| `SERVER_MODE` | `debug` | Gin mode (`debug` / `release`) |
-| `SERVER_PORT` | `37777` | HTTP listen port |
-| `DATABASE_HOST` | `localhost` | PostgreSQL host |
-| `DATABASE_PORT` | `5432` | PostgreSQL port |
-| `DATABASE_USER` | `colink` | PostgreSQL user when running a binary directly |
-| `DATABASE_PASSWORD` | *(empty)* | PostgreSQL password when running a binary directly |
-| `DATABASE_DBNAME` | `colink` | PostgreSQL database name when running a binary directly |
-| `DATABASE_SSLMODE` | `disable` | PostgreSQL SSL mode |
-| `JWT_ACCESS_TTL` | `72h` | Access token TTL |
-| `JWT_REFRESH_TTL` | `720h` | Refresh token TTL |
-| `WS_TICKET_TTL` | `30s` | WebSocket ticket TTL |
-| `UPDATE_CHECK_INTERVAL` | `30m` | GitHub release check interval |
-| `UPDATE_STORAGE_PATH` | `./data/updates` | Update asset storage path |
-| `UPDATE_GITHUB_TOKEN` | *(empty)* | Optional GitHub token for release checks and asset downloads |
-| `UPDATE_GITHUB_REPOS` | *(empty)* | Comma-separated `owner:repo:platform` release sources |
+See `.env.example`. CoLink binaries read `COLINK_*` variables directly, and Docker Compose passes the same names into containers.
 
 ## Services
 
