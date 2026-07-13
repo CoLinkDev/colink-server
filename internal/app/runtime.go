@@ -84,6 +84,8 @@ func EnsureUpdateSchema(db *gorm.DB) error {
 		return err
 	}
 	return execStatements(db,
+		`ALTER TABLE app_releases DROP CONSTRAINT IF EXISTS chk_app_release_platform;`,
+		`ALTER TABLE app_releases ADD CONSTRAINT chk_app_release_platform CHECK (platform IN ('android', 'windows', 'linux'));`,
 		`DO $$
 		BEGIN
 			IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_release_assets_release') THEN

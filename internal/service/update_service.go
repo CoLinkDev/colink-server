@@ -29,6 +29,7 @@ const updateDownloadPath = "/api/v1/update/download"
 var updatePlatforms = map[string]struct{}{
 	"android": {},
 	"windows": {},
+	"linux":   {},
 }
 
 type UpdateCheckResult struct {
@@ -186,7 +187,13 @@ func (s *UpdateService) checkRepo(ctx context.Context, repo config.GitHubRepoCon
 		return nil
 	}
 
-	assets, err := s.cacheAssets(ctx, platform, version, release.Assets)
+	releaseAssets := filterReleaseAssets(platform, release.Assets)
+	if len(releaseAssets) == 0 {
+		s.log.Warn("release has no platform assets", zap.String("platform", platform), zap.String("version", version))
+		return nil
+	}
+
+	assets, err := s.cacheAssets(ctx, platform, version, releaseAssets)
 	if err != nil {
 		return err
 	}
@@ -202,6 +209,30 @@ func (s *UpdateService) checkRepo(ctx context.Context, repo config.GitHubRepoCon
 
 	s.log.Info("cached app release", zap.String("platform", platform), zap.String("version", version), zap.Int("assets", len(assets)))
 	return nil
+}
+
+func filterReleaseAssets(platform string, assets []githubAsset) []githubAsset {
+	filtered := make([]githubAsset, 0, len(assets))
+	for _, asset := range assets {
+		if matchesPlatformAsset(platform, asset.Name) {
+			filtered = append(filtered, asset)
+		}
+	}
+	return filtered
+}
+
+func matchesPlatformAsset(platform, name string) bool {
+	extension := strings.ToLower(filepath.Ext(name))
+	switch platform {
+	case "android":
+		return extension == ".apk"
+	case "windows":
+		return extension == ".exe" || extension == ".msi"
+	case "linux":
+		return extension == ".deb" || extension == ".appimage"
+	default:
+		return false
+	}
 }
 
 func (s *UpdateService) fetchLatestRelease(ctx context.Context, repo config.GitHubRepoConfig) (*githubRelease, error) {

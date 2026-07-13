@@ -61,6 +61,33 @@ func TestCompareSemver(t *testing.T) {
 	}
 }
 
+func TestFilterReleaseAssets(t *testing.T) {
+	assets := []githubAsset{
+		{Name: "CoLink_1.2.7_x64-setup.exe"},
+		{Name: "CoLink_1.2.7_x64_en-US.msi"},
+		{Name: "CoLink_1.2.7_amd64.deb"},
+		{Name: "CoLink_1.2.7_amd64.AppImage"},
+		{Name: "app-release.apk"},
+	}
+
+	tests := []struct {
+		platform string
+		count    int
+	}{
+		{platform: "android", count: 1},
+		{platform: "windows", count: 2},
+		{platform: "linux", count: 2},
+	}
+
+	for _, test := range tests {
+		t.Run(test.platform, func(t *testing.T) {
+			if actual := len(filterReleaseAssets(test.platform, assets)); actual != test.count {
+				t.Fatalf("filtered %d assets, want %d", actual, test.count)
+			}
+		})
+	}
+}
+
 func sign(value int) int {
 	switch {
 	case value > 0:

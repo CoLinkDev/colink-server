@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS app_releases (
     release_notes text NOT NULL DEFAULT '',
     published_at timestamptz NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
-    CONSTRAINT chk_app_release_platform CHECK (platform IN ('android', 'windows')),
+    CONSTRAINT chk_app_release_platform CHECK (platform IN ('android', 'windows', 'linux')),
     CONSTRAINT uq_app_releases_platform_version UNIQUE (platform, version)
 );
 
