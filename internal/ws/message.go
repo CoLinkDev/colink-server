@@ -3,19 +3,21 @@ package ws
 import "encoding/json"
 
 type ClientMessage struct {
-	ID      string          `json:"id"`
-	Type    string          `json:"type"`
-	To      *string         `json:"to,omitempty"`
-	Payload json.RawMessage `json:"payload,omitempty"`
+	ID            string          `json:"id"`
+	Type          string          `json:"type"`
+	To            *string         `json:"to,omitempty"`
+	CorrelationID *string         `json:"correlationId,omitempty"`
+	Payload       json.RawMessage `json:"payload,omitempty"`
 }
 
 type MessageEnvelope struct {
-	ID        string  `json:"id"`
-	Type      string  `json:"type"`
-	From      *string `json:"from,omitempty"`
-	To        *string `json:"to,omitempty"`
-	Payload   any     `json:"payload,omitempty"`
-	Timestamp int64   `json:"timestamp,omitempty"`
+	ID            string  `json:"id"`
+	Type          string  `json:"type"`
+	From          *string `json:"from,omitempty"`
+	To            *string `json:"to,omitempty"`
+	CorrelationID *string `json:"correlationId,omitempty"`
+	Payload       any     `json:"payload,omitempty"`
+	Timestamp     int64   `json:"timestamp,omitempty"`
 }
 
 type DeviceOnlinePayload struct {

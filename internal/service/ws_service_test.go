@@ -44,17 +44,58 @@ func TestHandleMessageBroadcastFansOutToSameUserExceptSender(t *testing.T) {
 	_, receiverTwoConn := newTestWsClient(t, hub, userID, receiverTwoID)
 	_, otherUserConn := newTestWsClient(t, hub, uuid.NewString(), uuid.NewString())
 
+	correlationID := "request-1"
 	payload := json.RawMessage(`{"type":"clipboard.v1.sync","payload":{"contentType":"text/plain","content":"hello"}}`)
 	service.HandleMessage(sender, ws.ClientMessage{
-		ID:      "broadcast-1",
-		Type:    "broadcast",
-		Payload: payload,
+		ID:            "broadcast-1",
+		Type:          "broadcast",
+		CorrelationID: &correlationID,
+		Payload:       payload,
 	})
 
-	assertBroadcastEnvelope(t, readEnvelope(t, receiverOneConn), "broadcast-1", senderID, payload)
-	assertBroadcastEnvelope(t, readEnvelope(t, receiverTwoConn), "broadcast-1", senderID, payload)
+	assertBroadcastEnvelope(t, readEnvelope(t, receiverOneConn), "broadcast-1", senderID, correlationID, payload)
+	assertBroadcastEnvelope(t, readEnvelope(t, receiverTwoConn), "broadcast-1", senderID, correlationID, payload)
 	assertNoEnvelope(t, senderConn)
 	assertNoEnvelope(t, otherUserConn)
+}
+
+func TestHandleMessageRelayPassesThroughCorrelationID(t *testing.T) {
+	hub := ws.NewHub()
+	service := &WsService{hub: hub, lastSeenByID: make(map[uuid.UUID]time.Time)}
+	userID := uuid.NewString()
+	senderID := uuid.NewString()
+	receiverID := uuid.NewString()
+
+	sender, _ := newTestWsClient(t, hub, userID, senderID)
+	_, receiverConn := newTestWsClient(t, hub, userID, receiverID)
+
+	correlationID := "request-2"
+	payload := json.RawMessage(`{"type":"message.v1.text","payload":{"messageId":"message-1","text":"hello"}}`)
+	service.HandleMessage(sender, ws.ClientMessage{
+		ID:            "relay-1",
+		Type:          "relay",
+		To:            &receiverID,
+		CorrelationID: &correlationID,
+		Payload:       payload,
+	})
+
+	envelope := readEnvelope(t, receiverConn)
+	if envelope.ID != "relay-1" {
+		t.Fatalf("expected id %q, got %q", "relay-1", envelope.ID)
+	}
+	if envelope.Type != "relay" {
+		t.Fatalf("expected relay type, got %q", envelope.Type)
+	}
+	if envelope.From == nil || *envelope.From != senderID {
+		t.Fatalf("expected from %q, got %v", senderID, envelope.From)
+	}
+	if envelope.To == nil || *envelope.To != receiverID {
+		t.Fatalf("expected to %q, got %v", receiverID, envelope.To)
+	}
+	if envelope.CorrelationID == nil || *envelope.CorrelationID != correlationID {
+		t.Fatalf("expected correlationId %q, got %v", correlationID, envelope.CorrelationID)
+	}
+	assertEnvelopePayload(t, envelope.Payload, payload)
 }
 
 func TestHandleMessageBroadcastDropsEmptyPayload(t *testing.T) {
@@ -193,7 +234,7 @@ func assertNoEnvelope(t *testing.T, conn *websocket.Conn) {
 	}
 }
 
-func assertBroadcastEnvelope(t *testing.T, envelope ws.MessageEnvelope, id string, from string, payload json.RawMessage) {
+func assertBroadcastEnvelope(t *testing.T, envelope ws.MessageEnvelope, id string, from string, correlationID string, payload json.RawMessage) {
 	t.Helper()
 
 	if envelope.ID != id {
@@ -208,11 +249,20 @@ func assertBroadcastEnvelope(t *testing.T, envelope ws.MessageEnvelope, id strin
 	if envelope.To != nil {
 		t.Fatalf("expected nil to, got %q", *envelope.To)
 	}
+	if envelope.CorrelationID == nil || *envelope.CorrelationID != correlationID {
+		t.Fatalf("expected correlationId %q, got %v", correlationID, envelope.CorrelationID)
+	}
 	if envelope.Timestamp <= 0 {
 		t.Fatalf("expected timestamp, got %d", envelope.Timestamp)
 	}
 
-	actualPayload, err := json.Marshal(envelope.Payload)
+	assertEnvelopePayload(t, envelope.Payload, payload)
+}
+
+func assertEnvelopePayload(t *testing.T, payloadValue any, expectedPayload json.RawMessage) {
+	t.Helper()
+
+	actualPayload, err := json.Marshal(payloadValue)
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)
 	}
@@ -222,10 +272,10 @@ func assertBroadcastEnvelope(t *testing.T, envelope ws.MessageEnvelope, id strin
 	if err := json.Unmarshal(actualPayload, &actual); err != nil {
 		t.Fatalf("unmarshal actual payload: %v", err)
 	}
-	if err := json.Unmarshal(payload, &expected); err != nil {
+	if err := json.Unmarshal(expectedPayload, &expected); err != nil {
 		t.Fatalf("unmarshal expected payload: %v", err)
 	}
 	if !reflect.DeepEqual(actual, expected) {
-		t.Fatalf("expected payload %s, got %s", payload, actualPayload)
+		t.Fatalf("expected payload %s, got %s", expectedPayload, actualPayload)
 	}
 }

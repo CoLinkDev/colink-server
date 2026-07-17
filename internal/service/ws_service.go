@@ -214,12 +214,13 @@ func (s *WsService) handleRelay(client *ws.Client, message ws.ClientMessage) {
 	from := client.DeviceID()
 	to := *message.To
 	s.hub.SendToDevice(client.UserID(), to, ws.MessageEnvelope{
-		ID:        message.ID,
-		Type:      "relay",
-		From:      &from,
-		To:        &to,
-		Payload:   json.RawMessage(message.Payload),
-		Timestamp: time.Now().UTC().UnixMilli(),
+		ID:            message.ID,
+		Type:          "relay",
+		From:          &from,
+		To:            &to,
+		CorrelationID: message.CorrelationID,
+		Payload:       json.RawMessage(message.Payload),
+		Timestamp:     time.Now().UTC().UnixMilli(),
 	})
 }
 
@@ -230,12 +231,13 @@ func (s *WsService) handleBroadcast(client *ws.Client, message ws.ClientMessage)
 
 	from := client.DeviceID()
 	s.hub.Broadcast(client.UserID(), client.DeviceID(), ws.MessageEnvelope{
-		ID:        message.ID,
-		Type:      "broadcast",
-		From:      &from,
-		To:        nil,
-		Payload:   json.RawMessage(message.Payload),
-		Timestamp: time.Now().UTC().UnixMilli(),
+		ID:            message.ID,
+		Type:          "broadcast",
+		From:          &from,
+		To:            nil,
+		CorrelationID: message.CorrelationID,
+		Payload:       json.RawMessage(message.Payload),
+		Timestamp:     time.Now().UTC().UnixMilli(),
 	})
 }
 
