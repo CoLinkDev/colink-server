@@ -16,10 +16,11 @@ type AppRelease struct {
 }
 
 type ReleaseAsset struct {
-	ID        uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	ReleaseID uuid.UUID `gorm:"type:uuid;not null;index:idx_asset_release_id;uniqueIndex:idx_asset_release_file;constraint:OnDelete:CASCADE"`
-	FileName  string    `gorm:"size:255;not null;uniqueIndex:idx_asset_release_file"`
-	FileSize  int64     `gorm:"not null"`
-	FilePath  string    `gorm:"size:500;not null"`
-	CreatedAt time.Time `gorm:"not null;default:now()"`
+	ID              uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
+	ReleaseID       uuid.UUID `gorm:"type:uuid;not null;index:idx_asset_release_id;uniqueIndex:idx_asset_release_file;constraint:OnDelete:CASCADE"`
+	FileName        string    `gorm:"size:255;not null;uniqueIndex:idx_asset_release_file"`
+	FileSize        int64     `gorm:"not null"`
+	FilePath        string    `gorm:"size:500;not null"`
+	SourceUpdatedAt *time.Time `gorm:"type:timestamptz"`
+	CreatedAt       time.Time `gorm:"not null;default:now()"`
 }

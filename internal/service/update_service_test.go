@@ -1,6 +1,11 @@
 package service
 
-import "testing"
+import (
+	"testing"
+	"time"
+
+	"colink-server/internal/model"
+)
 
 func TestNormalizeVersion(t *testing.T) {
 	tests := map[string]string{
@@ -85,6 +90,23 @@ func TestFilterReleaseAssets(t *testing.T) {
 				t.Fatalf("filtered %d assets, want %d", actual, test.count)
 			}
 		})
+	}
+}
+
+func TestAssetNeedsRefresh(t *testing.T) {
+	previous := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	asset := githubAsset{UpdatedAt: previous.Add(time.Hour)}
+	if !assetNeedsRefresh(asset, model.ReleaseAsset{}, false) {
+		t.Fatal("expected new asset to be downloaded")
+	}
+	if !assetNeedsRefresh(asset, model.ReleaseAsset{}, true) {
+		t.Fatal("expected legacy asset to be downloaded")
+	}
+	if !assetNeedsRefresh(asset, model.ReleaseAsset{SourceUpdatedAt: &previous}, true) {
+		t.Fatal("expected changed source asset to be downloaded")
+	}
+	if assetNeedsRefresh(asset, model.ReleaseAsset{SourceUpdatedAt: &asset.UpdatedAt}, true) {
+		t.Fatal("expected unchanged source asset to be reused")
 	}
 }
 

@@ -68,6 +68,7 @@ type githubAsset struct {
 	Name               string `json:"name"`
 	Size               int64  `json:"size"`
 	BrowserDownloadURL string `json:"browser_download_url"`
+	UpdatedAt          time.Time `json:"updated_at"`
 }
 
 func NewUpdateService(releaseRepo *repository.ReleaseRepository, cfg config.UpdateConfig, log *zap.Logger) *UpdateService {
@@ -175,12 +176,9 @@ func (s *UpdateService) checkRepo(ctx context.Context, repo config.GitHubRepoCon
 		return fmt.Errorf("normalize release tag %q: %w", release.TagName, err)
 	}
 
-	exists, err := s.releaseRepo.ExistsByPlatformAndVersion(platform, version)
+	existingAssets, err := s.releaseAssets(platform, version)
 	if err != nil {
 		return pkg.InternalError(err)
-	}
-	if exists {
-		return nil
 	}
 	if len(release.Assets) == 0 {
 		s.log.Warn("release has no assets", zap.String("platform", platform), zap.String("version", version))
@@ -193,7 +191,7 @@ func (s *UpdateService) checkRepo(ctx context.Context, repo config.GitHubRepoCon
 		return nil
 	}
 
-	assets, err := s.cacheAssets(ctx, platform, version, releaseAssets)
+	assets, err := s.cacheAssets(ctx, platform, version, releaseAssets, existingAssets)
 	if err != nil {
 		return err
 	}
@@ -203,12 +201,34 @@ func (s *UpdateService) checkRepo(ctx context.Context, repo config.GitHubRepoCon
 		ReleaseNotes: release.Body,
 		PublishedAt:  release.PublishedAt,
 	}
-	if err := s.releaseRepo.CreateWithAssets(appRelease, assets); err != nil {
+	created, staleAssets, err := s.releaseRepo.CreateOrUpdateWithAssets(appRelease, assets)
+	if err != nil {
 		return pkg.InternalError(err)
 	}
+	s.removeStaleAssets(staleAssets)
 
-	s.log.Info("cached app release", zap.String("platform", platform), zap.String("version", version), zap.Int("assets", len(assets)))
+	s.log.Info("synced app release", zap.String("platform", platform), zap.String("version", version), zap.Int("assets", len(assets)), zap.Bool("created", created))
 	return nil
+}
+
+func (s *UpdateService) releaseAssets(platform, version string) (map[string]model.ReleaseAsset, error) {
+	release, err := s.releaseRepo.FindByPlatformAndVersion(platform, version)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return map[string]model.ReleaseAsset{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	assets, err := s.releaseRepo.FindAssetsByReleaseID(release.ID)
+	if err != nil {
+		return nil, err
+	}
+	assetsByName := make(map[string]model.ReleaseAsset, len(assets))
+	for _, asset := range assets {
+		assetsByName[asset.FileName] = asset
+	}
+	return assetsByName, nil
 }
 
 func filterReleaseAssets(platform string, assets []githubAsset) []githubAsset {
@@ -267,7 +287,7 @@ func (s *UpdateService) fetchLatestRelease(ctx context.Context, repo config.GitH
 	return &release, nil
 }
 
-func (s *UpdateService) cacheAssets(ctx context.Context, platform, version string, assets []githubAsset) ([]model.ReleaseAsset, error) {
+func (s *UpdateService) cacheAssets(ctx context.Context, platform, version string, assets []githubAsset, existingAssets map[string]model.ReleaseAsset) ([]model.ReleaseAsset, error) {
 	targetDir := filepath.Join(s.cfg.StoragePath, platform, version)
 	if err := os.MkdirAll(targetDir, 0o755); err != nil {
 		return nil, err
@@ -280,7 +300,8 @@ func (s *UpdateService) cacheAssets(ctx context.Context, platform, version strin
 			return nil, err
 		}
 		filePath := filepath.Join(targetDir, fileName)
-		if err := s.ensureAssetCached(ctx, asset, filePath); err != nil {
+		existingAsset, exists := existingAssets[fileName]
+		if err := s.ensureAssetCached(ctx, asset, filePath, assetNeedsRefresh(asset, existingAsset, exists)); err != nil {
 			return nil, err
 		}
 		info, err := os.Stat(filePath)
@@ -291,15 +312,22 @@ func (s *UpdateService) cacheAssets(ctx context.Context, platform, version strin
 			FileName: fileName,
 			FileSize: info.Size(),
 			FilePath: filePath,
+			SourceUpdatedAt: &asset.UpdatedAt,
 		})
 	}
 
 	return cached, nil
 }
 
-func (s *UpdateService) ensureAssetCached(ctx context.Context, asset githubAsset, filePath string) error {
-	if info, err := os.Stat(filePath); err == nil && asset.Size >= 0 && info.Size() == asset.Size {
-		return nil
+func assetNeedsRefresh(asset githubAsset, existing model.ReleaseAsset, exists bool) bool {
+	return !exists || existing.SourceUpdatedAt == nil || !asset.UpdatedAt.Equal(*existing.SourceUpdatedAt)
+}
+
+func (s *UpdateService) ensureAssetCached(ctx context.Context, asset githubAsset, filePath string, refresh bool) error {
+	if !refresh {
+		if info, err := os.Stat(filePath); err == nil && asset.Size >= 0 && info.Size() == asset.Size {
+			return nil
+		}
 	}
 
 	tmpPath := filePath + ".tmp"
@@ -320,6 +348,14 @@ func (s *UpdateService) ensureAssetCached(ctx context.Context, asset githubAsset
 	}
 	_ = os.Remove(filePath)
 	return os.Rename(tmpPath, filePath)
+}
+
+func (s *UpdateService) removeStaleAssets(assets []model.ReleaseAsset) {
+	for _, asset := range assets {
+		if err := os.Remove(asset.FilePath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			s.log.Warn("remove stale release asset", zap.String("path", asset.FilePath), zap.Error(err))
+		}
+	}
 }
 
 func (s *UpdateService) downloadAsset(ctx context.Context, asset githubAsset, tmpPath string) error {
