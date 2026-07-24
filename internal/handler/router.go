@@ -140,5 +140,6 @@ func registerUpdateRoutes(router *gin.Engine, updateHandler *UpdateHandler) {
 
 	update := v1.Group("/update")
 	update.GET("/check", updateHandler.CheckUpdate)
+	update.GET("/tauri/:target/:arch/:currentVersion", updateHandler.GetTauriManifest)
 	update.GET("/download/:platform/:version/:filename", updateHandler.DownloadAsset)
 }

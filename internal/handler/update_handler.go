@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -28,6 +30,25 @@ func (h *UpdateHandler) CheckUpdate(c *gin.Context) {
 	success(c, result)
 }
 
+func (h *UpdateHandler) GetTauriManifest(c *gin.Context) {
+	manifest, err := h.updateService.GetTauriManifest(
+		c.Param("target"),
+		c.Param("arch"),
+		c.Param("currentVersion"),
+	)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	if manifest == nil {
+		c.Status(http.StatusNoContent)
+		return
+	}
+
+	manifest.URL = absoluteUpdateURL(c, manifest.URL)
+	c.JSON(http.StatusOK, manifest)
+}
+
 func (h *UpdateHandler) DownloadAsset(c *gin.Context) {
 	filePath, err := h.updateService.GetAssetFilePath(
 		c.Param("platform"),
@@ -50,4 +71,15 @@ func (h *UpdateHandler) DownloadAsset(c *gin.Context) {
 
 	c.Header("Content-Type", "application/octet-stream")
 	c.FileAttachment(filePath, c.Param("filename"))
+}
+
+func absoluteUpdateURL(c *gin.Context, path string) string {
+	scheme := "http"
+	if c.Request.TLS != nil {
+		scheme = "https"
+	}
+	if forwarded := strings.Split(c.GetHeader("X-Forwarded-Proto"), ",")[0]; forwarded == "https" {
+		scheme = "https"
+	}
+	return fmt.Sprintf("%s://%s%s", scheme, c.Request.Host, path)
 }

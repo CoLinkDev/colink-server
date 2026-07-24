@@ -50,6 +50,14 @@ type UpdateAsset struct {
 	DownloadURL string `json:"downloadUrl"`
 }
 
+type TauriManifest struct {
+	Version   string `json:"version"`
+	Notes     string `json:"notes"`
+	PubDate   string `json:"pub_date"`
+	Signature string `json:"signature"`
+	URL       string `json:"url"`
+}
+
 type UpdateService struct {
 	releaseRepo *repository.ReleaseRepository
 	cfg         config.UpdateConfig
@@ -109,15 +117,14 @@ func (s *UpdateService) GetLatestRelease(platform string, currentVersion string)
 	}
 
 	if strings.TrimSpace(currentVersion) != "" {
-		latest, err := parseSemver(release.Version)
+		if _, err := parseSemver(currentVersion); err != nil {
+			return nil, pkg.NewAppError(http.StatusBadRequest, pkg.CodeInvalidParameter, "invalid parameter")
+		}
+		hasUpdate, err := isNewerVersion(release.Version, currentVersion)
 		if err != nil {
 			return nil, pkg.InternalError(err)
 		}
-		current, err := parseSemver(currentVersion)
-		if err != nil {
-			return nil, pkg.NewAppError(http.StatusBadRequest, pkg.CodeInvalidParameter, "invalid parameter")
-		}
-		if latest.compare(current) <= 0 {
+		if !hasUpdate {
 			return &UpdateCheckResult{HasUpdate: false, Latest: nil}, nil
 		}
 	}
@@ -127,6 +134,67 @@ func (s *UpdateService) GetLatestRelease(platform string, currentVersion string)
 		return nil, err
 	}
 	return &UpdateCheckResult{HasUpdate: true, Latest: result}, nil
+}
+
+func (s *UpdateService) GetTauriManifest(target, arch, currentVersion string) (*TauriManifest, error) {
+	if !strings.EqualFold(strings.TrimSpace(target), "windows") || strings.TrimSpace(arch) != "x86_64" {
+		return nil, nil
+	}
+
+	release, err := s.releaseRepo.FindLatestByPlatform("windows")
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, pkg.InternalError(err)
+	}
+
+	if _, err := parseSemver(currentVersion); err != nil {
+		return nil, pkg.NewAppError(http.StatusBadRequest, pkg.CodeInvalidParameter, "invalid parameter")
+	}
+	hasUpdate, err := isNewerVersion(release.Version, currentVersion)
+	if err != nil {
+		return nil, pkg.InternalError(err)
+	}
+	if !hasUpdate {
+		return nil, nil
+	}
+
+	assets, err := s.releaseRepo.FindAssetsByReleaseID(release.ID)
+	if err != nil {
+		return nil, pkg.InternalError(err)
+	}
+	archive, signature := selectTauriAssets(assets)
+	if archive == nil || signature == nil {
+		return nil, nil
+	}
+	archiveExists, err := cachedAssetExists(archive.FilePath)
+	if err != nil {
+		return nil, pkg.InternalError(err)
+	}
+	signatureExists, err := cachedAssetExists(signature.FilePath)
+	if err != nil {
+		return nil, pkg.InternalError(err)
+	}
+	if !archiveExists || !signatureExists {
+		return nil, nil
+	}
+
+	signatureText, err := os.ReadFile(signature.FilePath)
+	if err != nil {
+		return nil, pkg.InternalError(err)
+	}
+	if strings.TrimSpace(string(signatureText)) == "" {
+		return nil, nil
+	}
+
+	return &TauriManifest{
+		Version:   release.Version,
+		Notes:     release.ReleaseNotes,
+		PubDate:   release.PublishedAt.UTC().Format(time.RFC3339Nano),
+		Signature: strings.TrimSpace(string(signatureText)),
+		URL:       buildDownloadURL(release.Platform, release.Version, archive.FileName),
+	}, nil
 }
 
 func (s *UpdateService) GetAssetFilePath(platform, version, filename string) (string, error) {
@@ -247,7 +315,9 @@ func matchesPlatformAsset(platform, name string) bool {
 	case "android":
 		return extension == ".apk"
 	case "windows":
-		return extension == ".exe" || extension == ".msi"
+		return extension == ".exe" || extension == ".msi" ||
+			strings.HasSuffix(strings.ToLower(name), ".nsis.zip") ||
+			strings.HasSuffix(strings.ToLower(name), ".nsis.zip.sig")
 	case "linux":
 		return extension == ".deb" || extension == ".appimage"
 	default:
@@ -438,6 +508,18 @@ func normalizeVersion(version string) (string, error) {
 	return normalized, nil
 }
 
+func isNewerVersion(latestVersion, currentVersion string) (bool, error) {
+	latest, err := parseSemver(latestVersion)
+	if err != nil {
+		return false, err
+	}
+	current, err := parseSemver(currentVersion)
+	if err != nil {
+		return false, err
+	}
+	return latest.compare(current) > 0, nil
+}
+
 type semverValue struct {
 	major int
 	minor int
@@ -486,6 +568,32 @@ func buildDownloadURL(platform, version, fileName string) string {
 		url.PathEscape(version),
 		url.PathEscape(fileName),
 	)
+}
+
+func selectTauriAssets(assets []model.ReleaseAsset) (*model.ReleaseAsset, *model.ReleaseAsset) {
+	var archive *model.ReleaseAsset
+	var signature *model.ReleaseAsset
+	for index := range assets {
+		name := strings.ToLower(assets[index].FileName)
+		switch {
+		case strings.HasSuffix(name, ".nsis.zip"):
+			archive = &assets[index]
+		case strings.HasSuffix(name, ".nsis.zip.sig"):
+			signature = &assets[index]
+		}
+	}
+	return archive, signature
+}
+
+func cachedAssetExists(filePath string) (bool, error) {
+	info, err := os.Stat(filePath)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return info.Mode().IsRegular(), nil
 }
 
 func cleanAssetFileName(name string) (string, error) {

@@ -70,6 +70,8 @@ func TestFilterReleaseAssets(t *testing.T) {
 	assets := []githubAsset{
 		{Name: "CoLink_1.2.7_x64-setup.exe"},
 		{Name: "CoLink_1.2.7_x64_en-US.msi"},
+		{Name: "CoLink_1.2.7_x64-setup.nsis.zip"},
+		{Name: "CoLink_1.2.7_x64-setup.nsis.zip.sig"},
 		{Name: "CoLink_1.2.7_amd64.deb"},
 		{Name: "CoLink_1.2.7_amd64.AppImage"},
 		{Name: "app-release.apk"},
@@ -80,7 +82,7 @@ func TestFilterReleaseAssets(t *testing.T) {
 		count    int
 	}{
 		{platform: "android", count: 1},
-		{platform: "windows", count: 2},
+		{platform: "windows", count: 4},
 		{platform: "linux", count: 2},
 	}
 
@@ -90,6 +92,72 @@ func TestFilterReleaseAssets(t *testing.T) {
 				t.Fatalf("filtered %d assets, want %d", actual, test.count)
 			}
 		})
+	}
+}
+
+func TestSelectTauriAssets(t *testing.T) {
+	tests := []struct {
+		name          string
+		assets        []model.ReleaseAsset
+		wantArchive   bool
+		wantSignature bool
+	}{
+		{
+			name: "complete pair",
+			assets: []model.ReleaseAsset{
+				{FileName: "CoLink_1.2.7_x64-setup.nsis.zip"},
+				{FileName: "CoLink_1.2.7_x64-setup.nsis.zip.sig"},
+			},
+			wantArchive: true, wantSignature: true,
+		},
+		{
+			name: "archive only",
+			assets: []model.ReleaseAsset{
+				{FileName: "CoLink_1.2.7_x64-setup.nsis.zip"},
+			},
+			wantArchive: true,
+		},
+		{
+			name: "signature only",
+			assets: []model.ReleaseAsset{
+				{FileName: "CoLink_1.2.7_x64-setup.nsis.zip.sig"},
+			},
+			wantSignature: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			archive, signature := selectTauriAssets(test.assets)
+			if (archive != nil) != test.wantArchive {
+				t.Fatalf("archive present = %t, want %t", archive != nil, test.wantArchive)
+			}
+			if (signature != nil) != test.wantSignature {
+				t.Fatalf("signature present = %t, want %t", signature != nil, test.wantSignature)
+			}
+		})
+	}
+}
+
+func TestIsNewerVersion(t *testing.T) {
+	tests := []struct {
+		latest  string
+		current string
+		want    bool
+	}{
+		{latest: "1.2.4", current: "1.2.3", want: true},
+		{latest: "1.2.3", current: "1.2.3", want: false},
+		{latest: "1.2.3", current: "1.2.4", want: false},
+	}
+
+	for _, test := range tests {
+		actual, err := isNewerVersion(test.latest, test.current)
+		if err != nil {
+			t.Fatalf("isNewerVersion(%q, %q): %v", test.latest, test.current, err)
+		}
+		if actual != test.want {
+			t.Fatalf("isNewerVersion(%q, %q) = %t, want %t", test.latest, test.current, actual, test.want)
+		}
 	}
 }
 
