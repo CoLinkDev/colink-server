@@ -21,7 +21,11 @@ func NewUpdateHandler(updateService *service.UpdateService) *UpdateHandler {
 }
 
 func (h *UpdateHandler) CheckUpdate(c *gin.Context) {
-	result, err := h.updateService.GetLatestRelease(c.Query("platform"), c.Query("version"))
+	result, err := h.updateService.GetLatestRelease(
+		c.Query("platform"),
+		c.Query("arch"),
+		c.Query("version"),
+	)
 	if err != nil {
 		writeError(c, err)
 		return

@@ -139,6 +139,116 @@ func TestSelectTauriAssets(t *testing.T) {
 	}
 }
 
+func TestNormalizeUpdateArchitecture(t *testing.T) {
+	tests := []struct {
+		platform string
+		input    string
+		want     string
+	}{
+		{platform: "windows", input: "", want: updateArchitectureX64},
+		{platform: "windows", input: "amd64", want: updateArchitectureX64},
+		{platform: "windows", input: "aarch64", want: updateArchitectureARM64},
+		{platform: "linux", input: "", want: updateArchitectureX64},
+		{platform: "linux", input: "x86_64", want: updateArchitectureX64},
+		{platform: "linux", input: "arm64", want: updateArchitectureARM64},
+		{platform: "android", input: "arm64-v8a", want: updateArchitectureARM64V8A},
+		{platform: "android", input: "x86", want: updateArchitectureAndroidX86},
+	}
+
+	for _, test := range tests {
+		got, err := normalizeUpdateArchitecture(test.platform, test.input)
+		if err != nil {
+			t.Fatalf("normalizeUpdateArchitecture(%q, %q): %v", test.platform, test.input, err)
+		}
+		if got != test.want {
+			t.Fatalf("normalizeUpdateArchitecture(%q, %q) = %q, want %q", test.platform, test.input, got, test.want)
+		}
+	}
+
+	for _, test := range []struct {
+		platform string
+		input    string
+	}{
+		{platform: "android", input: "arm64"},
+		{platform: "windows", input: "arm64-v8a"},
+	} {
+		if _, err := normalizeUpdateArchitecture(test.platform, test.input); err == nil {
+			t.Fatalf("expected normalizeUpdateArchitecture(%q, %q) to fail", test.platform, test.input)
+		}
+	}
+}
+
+func TestSelectUpdateAsset(t *testing.T) {
+	assets := []model.ReleaseAsset{
+		{FileName: "CoLink_1.2.7_x64-setup.exe"},
+		{FileName: "CoLink_1.2.7_x64-setup.nsis.zip"},
+		{FileName: "CoLink_1.2.7_x64-setup.nsis.zip.sig"},
+		{FileName: "CoLink_1.2.7_arm64-setup.exe"},
+		{FileName: "CoLink_1.2.7_amd64.deb"},
+		{FileName: "CoLink_1.2.7_arm64.AppImage"},
+		{FileName: "colink-arm64-v8a-release.apk"},
+		{FileName: "colink-armeabi-v7a-release.apk"},
+		{FileName: "colink-universal-release.apk"},
+	}
+
+	tests := []struct {
+		name          string
+		platform      string
+		architecture  string
+		legacyAndroid bool
+		want          string
+	}{
+		{name: "windows x64 installer", platform: "windows", architecture: updateArchitectureX64, want: "CoLink_1.2.7_x64-setup.exe"},
+		{name: "windows arm64 installer", platform: "windows", architecture: updateArchitectureARM64, want: "CoLink_1.2.7_arm64-setup.exe"},
+		{name: "linux historical amd64", platform: "linux", architecture: updateArchitectureX64, want: "CoLink_1.2.7_amd64.deb"},
+		{name: "linux arm64 fallback", platform: "linux", architecture: updateArchitectureARM64, want: "CoLink_1.2.7_arm64.AppImage"},
+		{name: "android split", platform: "android", architecture: updateArchitectureARM64V8A, want: "colink-arm64-v8a-release.apk"},
+		{name: "android universal fallback", platform: "android", architecture: updateArchitectureAndroidX8664, want: "colink-universal-release.apk"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			asset, err := selectUpdateAsset(test.platform, test.architecture, test.legacyAndroid, assets)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if asset == nil || asset.FileName != test.want {
+				t.Fatalf("selected asset = %#v, want %q", asset, test.want)
+			}
+		})
+	}
+}
+
+func TestSelectUpdateAssetLegacyAndroidSkipsSplitReleases(t *testing.T) {
+	assets := []model.ReleaseAsset{
+		{FileName: "colink-arm64-v8a-release.apk"},
+		{FileName: "colink-universal-release.apk"},
+	}
+	asset, err := selectUpdateAsset("android", "", true, assets)
+	if err != nil || asset != nil {
+		t.Fatalf("selectUpdateAsset() = %#v, %v; want no update", asset, err)
+	}
+}
+
+func TestSelectUpdateAssetLegacyAndroidUsesUniversalRelease(t *testing.T) {
+	assets := []model.ReleaseAsset{{FileName: "colink-universal-release.apk"}}
+	asset, err := selectUpdateAsset("android", "", true, assets)
+	if err != nil || asset == nil || asset.FileName != "colink-universal-release.apk" {
+		t.Fatalf("selectUpdateAsset() = %#v, %v; want universal APK", asset, err)
+	}
+}
+
+func TestSelectUpdateAssetRejectsAmbiguousCandidates(t *testing.T) {
+	assets := []model.ReleaseAsset{
+		{FileName: "CoLink_1.2.7_x64-setup.exe"},
+		{FileName: "CoLink_1.2.7_x64-full.exe"},
+	}
+	asset, err := selectUpdateAsset("windows", updateArchitectureX64, false, assets)
+	if err == nil || asset != nil {
+		t.Fatalf("selectUpdateAsset() = %#v, %v; want ambiguity error", asset, err)
+	}
+}
+
 func TestIsNewerVersion(t *testing.T) {
 	tests := []struct {
 		latest  string

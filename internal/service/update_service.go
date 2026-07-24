@@ -26,10 +26,70 @@ import (
 
 const updateDownloadPath = "/api/v1/update/download"
 
+const (
+	updateArchitectureX64          = "x64"
+	updateArchitectureARM64        = "arm64"
+	updateArchitectureARM64V8A     = "arm64-v8a"
+	updateArchitectureARMEABIV7A   = "armeabi-v7a"
+	updateArchitectureAndroidX8664 = "x86_64"
+	updateArchitectureAndroidX86   = "x86"
+)
+
 var updatePlatforms = map[string]struct{}{
 	"android": {},
 	"windows": {},
 	"linux":   {},
+}
+
+var updateArchitectureAliases = map[string]map[string]string{
+	"windows": {
+		"x64":     updateArchitectureX64,
+		"x86_64":  updateArchitectureX64,
+		"amd64":   updateArchitectureX64,
+		"arm64":   updateArchitectureARM64,
+		"aarch64": updateArchitectureARM64,
+	},
+	"linux": {
+		"x64":     updateArchitectureX64,
+		"x86_64":  updateArchitectureX64,
+		"amd64":   updateArchitectureX64,
+		"arm64":   updateArchitectureARM64,
+		"aarch64": updateArchitectureARM64,
+	},
+	"android": {
+		"arm64-v8a":  updateArchitectureARM64V8A,
+		"armeabi-v7a": updateArchitectureARMEABIV7A,
+		"x86_64":      updateArchitectureAndroidX8664,
+		"x86":         updateArchitectureAndroidX86,
+	},
+}
+
+type updateArchitectureToken struct {
+	alias        string
+	architecture string
+}
+
+var updateArchitectureTokens = map[string][]updateArchitectureToken{
+	"windows": {
+		{alias: "x86_64", architecture: updateArchitectureX64},
+		{alias: "amd64", architecture: updateArchitectureX64},
+		{alias: "x64", architecture: updateArchitectureX64},
+		{alias: "aarch64", architecture: updateArchitectureARM64},
+		{alias: "arm64", architecture: updateArchitectureARM64},
+	},
+	"linux": {
+		{alias: "x86_64", architecture: updateArchitectureX64},
+		{alias: "amd64", architecture: updateArchitectureX64},
+		{alias: "x64", architecture: updateArchitectureX64},
+		{alias: "aarch64", architecture: updateArchitectureARM64},
+		{alias: "arm64", architecture: updateArchitectureARM64},
+	},
+	"android": {
+		{alias: "arm64-v8a", architecture: updateArchitectureARM64V8A},
+		{alias: "armeabi-v7a", architecture: updateArchitectureARMEABIV7A},
+		{alias: "x86_64", architecture: updateArchitectureAndroidX8664},
+		{alias: "x86", architecture: updateArchitectureAndroidX86},
+	},
 }
 
 type UpdateCheckResult struct {
@@ -102,10 +162,18 @@ func (s *UpdateService) CheckForUpdates(ctx context.Context) {
 	}
 }
 
-func (s *UpdateService) GetLatestRelease(platform string, currentVersion string) (*UpdateCheckResult, error) {
+func (s *UpdateService) GetLatestRelease(platform, architecture, currentVersion string) (*UpdateCheckResult, error) {
 	platform, err := normalizeUpdatePlatform(platform)
 	if err != nil {
 		return nil, err
+	}
+
+	legacyAndroid := platform == "android" && strings.TrimSpace(architecture) == ""
+	if !legacyAndroid {
+		architecture, err = normalizeUpdateArchitecture(platform, architecture)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	release, err := s.releaseRepo.FindLatestByPlatform(platform)
@@ -129,11 +197,27 @@ func (s *UpdateService) GetLatestRelease(platform string, currentVersion string)
 		}
 	}
 
-	result, err := s.releaseResult(release)
+	assets, err := s.releaseRepo.FindAssetsByReleaseID(release.ID)
 	if err != nil {
-		return nil, err
+		return nil, pkg.InternalError(err)
 	}
-	return &UpdateCheckResult{HasUpdate: true, Latest: result}, nil
+
+	asset, err := selectUpdateAsset(platform, architecture, legacyAndroid, assets)
+	if err != nil {
+		s.log.Warn(
+			"release has ambiguous update assets",
+			zap.String("platform", platform),
+			zap.String("architecture", architecture),
+			zap.String("version", release.Version),
+			zap.Error(err),
+		)
+		return &UpdateCheckResult{HasUpdate: false, Latest: nil}, nil
+	}
+	if asset == nil {
+		return &UpdateCheckResult{HasUpdate: false, Latest: nil}, nil
+	}
+
+	return &UpdateCheckResult{HasUpdate: true, Latest: releaseResult(release, *asset)}, nil
 }
 
 func (s *UpdateService) GetTauriManifest(target, arch, currentVersion string) (*TauriManifest, error) {
@@ -458,27 +542,17 @@ func (s *UpdateService) downloadAsset(ctx context.Context, asset githubAsset, tm
 	return err
 }
 
-func (s *UpdateService) releaseResult(release *model.AppRelease) (*UpdateRelease, error) {
-	assets, err := s.releaseRepo.FindAssetsByReleaseID(release.ID)
-	if err != nil {
-		return nil, pkg.InternalError(err)
-	}
-
-	items := make([]UpdateAsset, 0, len(assets))
-	for _, asset := range assets {
-		items = append(items, UpdateAsset{
-			Name:        asset.FileName,
-			Size:        asset.FileSize,
-			DownloadURL: buildDownloadURL(release.Platform, release.Version, asset.FileName),
-		})
-	}
-
+func releaseResult(release *model.AppRelease, asset model.ReleaseAsset) *UpdateRelease {
 	return &UpdateRelease{
 		Version:      release.Version,
 		ReleaseNotes: release.ReleaseNotes,
 		PublishedAt:  release.PublishedAt,
-		Assets:       items,
-	}, nil
+		Assets: []UpdateAsset{{
+			Name:        asset.FileName,
+			Size:        asset.FileSize,
+			DownloadURL: buildDownloadURL(release.Platform, release.Version, asset.FileName),
+		}},
+	}
 }
 
 func (s *UpdateService) authorizeGitHub(req *http.Request) {
@@ -493,6 +567,19 @@ func normalizeUpdatePlatform(platform string) (string, error) {
 		return "", pkg.NewAppError(http.StatusBadRequest, pkg.CodeUpdatePlatformNotSupported, "platform not supported")
 	}
 	return normalized, nil
+}
+
+func normalizeUpdateArchitecture(platform, architecture string) (string, error) {
+	normalized := strings.ToLower(strings.TrimSpace(architecture))
+	if normalized == "" && (platform == "windows" || platform == "linux") {
+		return updateArchitectureX64, nil
+	}
+
+	canonical, ok := updateArchitectureAliases[platform][normalized]
+	if !ok {
+		return "", pkg.NewAppError(http.StatusBadRequest, pkg.CodeInvalidParameter, "invalid parameter")
+	}
+	return canonical, nil
 }
 
 func normalizeVersion(version string) (string, error) {
@@ -568,6 +655,123 @@ func buildDownloadURL(platform, version, fileName string) string {
 		url.PathEscape(version),
 		url.PathEscape(fileName),
 	)
+}
+
+func selectUpdateAsset(platform, architecture string, legacyAndroid bool, assets []model.ReleaseAsset) (*model.ReleaseAsset, error) {
+	if legacyAndroid {
+		return selectLegacyAndroidAsset(assets)
+	}
+
+	asset, err := selectArchitectureAsset(platform, architecture, assets)
+	if err != nil || asset != nil || platform != "android" {
+		return asset, err
+	}
+	return selectUniversalAndroidAsset(assets)
+}
+
+func selectLegacyAndroidAsset(assets []model.ReleaseAsset) (*model.ReleaseAsset, error) {
+	for index := range assets {
+		asset := &assets[index]
+		if updateAssetPriority("android", asset.FileName) == 0 && assetArchitecture("android", asset.FileName) != "" {
+			return nil, nil
+		}
+	}
+	return selectUniversalAndroidAsset(assets)
+}
+
+func selectArchitectureAsset(platform, architecture string, assets []model.ReleaseAsset) (*model.ReleaseAsset, error) {
+	for priority := 0; priority <= 1; priority++ {
+		matches := make([]*model.ReleaseAsset, 0, 1)
+		for index := range assets {
+			asset := &assets[index]
+			if updateAssetPriority(platform, asset.FileName) != priority || assetArchitecture(platform, asset.FileName) != architecture {
+				continue
+			}
+			matches = append(matches, asset)
+		}
+		switch len(matches) {
+		case 0:
+			continue
+		case 1:
+			return matches[0], nil
+		default:
+			return nil, fmt.Errorf("multiple priority-%d assets for %s/%s", priority, platform, architecture)
+		}
+	}
+	return nil, nil
+}
+
+func selectUniversalAndroidAsset(assets []model.ReleaseAsset) (*model.ReleaseAsset, error) {
+	matches := make([]*model.ReleaseAsset, 0, 1)
+	for index := range assets {
+		asset := &assets[index]
+		if updateAssetPriority("android", asset.FileName) == 0 && assetArchitecture("android", asset.FileName) == "" {
+			matches = append(matches, asset)
+		}
+	}
+	switch len(matches) {
+	case 0:
+		return nil, nil
+	case 1:
+		return matches[0], nil
+	default:
+		return nil, fmt.Errorf("multiple universal Android APKs")
+	}
+}
+
+func updateAssetPriority(platform, name string) int {
+	lowerName := strings.ToLower(name)
+	switch platform {
+	case "windows":
+		switch {
+		case strings.HasSuffix(lowerName, ".exe"):
+			return 0
+		case strings.HasSuffix(lowerName, ".msi"):
+			return 1
+		}
+	case "android":
+		if strings.HasSuffix(lowerName, ".apk") {
+			return 0
+		}
+	case "linux":
+		switch {
+		case strings.HasSuffix(lowerName, ".deb"):
+			return 0
+		case strings.HasSuffix(lowerName, ".appimage"):
+			return 1
+		}
+	}
+	return -1
+}
+
+func assetArchitecture(platform, name string) string {
+	for _, token := range updateArchitectureTokens[platform] {
+		if containsAssetToken(name, token.alias) {
+			return token.architecture
+		}
+	}
+	return ""
+}
+
+func containsAssetToken(name, token string) bool {
+	lowerName := strings.ToLower(name)
+	for offset := 0; ; {
+		index := strings.Index(lowerName[offset:], token)
+		if index < 0 {
+			return false
+		}
+		index += offset
+		end := index + len(token)
+		if (index == 0 || !isAssetTokenCharacter(lowerName[index-1])) &&
+			(end == len(lowerName) || !isAssetTokenCharacter(lowerName[end])) {
+			return true
+		}
+		offset = end
+	}
+}
+
+func isAssetTokenCharacter(value byte) bool {
+	return value >= 'a' && value <= 'z' || value >= '0' && value <= '9'
 }
 
 func selectTauriAssets(assets []model.ReleaseAsset) (*model.ReleaseAsset, *model.ReleaseAsset) {
