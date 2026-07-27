@@ -34,10 +34,11 @@ func NewMainRouter(cfg *config.Config, db *gorm.DB, log *zap.Logger) *gin.Engine
 	deviceHandler := NewDeviceHandler(deviceService)
 	meHandler := NewMeHandler(authService)
 	wsHandler := NewWsHandler(wsService)
+	pushHandler := NewPushHandler(wsService)
 	authMiddleware := middleware.NewAuthMiddleware(cfg.JWT.Secret)
 
 	router := newBaseRouter(log)
-	registerMainRoutes(router, authHandler, deviceHandler, meHandler, wsHandler, authMiddleware)
+	registerMainRoutes(router, authHandler, deviceHandler, meHandler, wsHandler, pushHandler, authMiddleware)
 	serveFrontend(router)
 	return router
 }
@@ -78,10 +79,11 @@ func NewRouter(cfg *config.Config, db *gorm.DB, log *zap.Logger) (*gin.Engine, *
 	deviceHandler := NewDeviceHandler(deviceService)
 	meHandler := NewMeHandler(authService)
 	wsHandler := NewWsHandler(wsService)
+	pushHandler := NewPushHandler(wsService)
 	updateHandler := NewUpdateHandler(updateService)
 	authMiddleware := middleware.NewAuthMiddleware(cfg.JWT.Secret)
 
-	registerMainRoutes(router, authHandler, deviceHandler, meHandler, wsHandler, authMiddleware)
+	registerMainRoutes(router, authHandler, deviceHandler, meHandler, wsHandler, pushHandler, authMiddleware)
 	registerUpdateRoutes(router, updateHandler)
 	serveFrontend(router)
 	return router, updateService
@@ -104,6 +106,7 @@ func registerMainRoutes(
 	deviceHandler *DeviceHandler,
 	meHandler *MeHandler,
 	wsHandler *WsHandler,
+	pushHandler *PushHandler,
 	authMiddleware *middleware.AuthMiddleware,
 ) {
 	api := router.Group("/api")
@@ -130,6 +133,13 @@ func registerMainRoutes(
 	wsGroup := v1.Group("/ws")
 	wsGroup.Use(authMiddleware.RequireAuth())
 	wsGroup.POST("/ticket", wsHandler.CreateTicket)
+
+	push := api.Group("/push")
+	push.Use(authMiddleware.RequireAuthWithFailure(pushHandler.Unauthorized))
+	push.GET("", pushHandler.Send)
+	push.POST("", pushHandler.Send)
+	push.GET("/*path", pushHandler.Send)
+	push.POST("/*path", pushHandler.Send)
 
 	router.GET("/ws/v1", wsHandler.Connect)
 }

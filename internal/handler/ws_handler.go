@@ -51,6 +51,16 @@ func (h *WsHandler) Connect(c *gin.Context) {
 		writeError(c, err)
 		return
 	}
+	advertisedWsVersion, hasWsVersion := c.GetQuery("wsVersion")
+	wsVersion, err := h.wsService.ValidateCloudWebSocketVersion(advertisedWsVersion)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	var reportedWsVersion *string
+	if hasWsVersion {
+		reportedWsVersion = &advertisedWsVersion
+	}
 
 	session, err := h.wsService.ConsumeTicket(c.Query("ticket"))
 	if err != nil {
@@ -70,6 +80,8 @@ func (h *WsHandler) Connect(c *gin.Context) {
 		session.DeviceName,
 		session.DeviceType,
 		businessVersion,
+		wsVersion,
+		reportedWsVersion,
 		h.wsService.HandleMessage,
 		h.wsService.HandleDisconnect,
 	)

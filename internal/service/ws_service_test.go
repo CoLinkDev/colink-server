@@ -148,6 +148,62 @@ func TestValidateBusinessVersion(t *testing.T) {
 	}
 }
 
+func TestValidateCloudWebSocketVersion(t *testing.T) {
+	service := &WsService{}
+	for _, testCase := range []struct {
+		version string
+		want    string
+	}{
+		{"", "1.0.0"},
+		{"not-semver", "1.0.0"},
+		{"1.0.0", "1.0.0"},
+		{"1.1.0", "1.1.0"},
+	} {
+		got, err := service.ValidateCloudWebSocketVersion(testCase.version)
+		if err != nil || got != testCase.want {
+			t.Fatalf("version %q: got %q, err=%v", testCase.version, got, err)
+		}
+	}
+
+	if _, err := service.ValidateCloudWebSocketVersion("2.0.0"); err == nil {
+		t.Fatal("expected incompatible major version to be rejected")
+	}
+}
+
+func TestPushAcknowledgementMustUseSendingConnection(t *testing.T) {
+	hub := ws.NewHub()
+	service := &WsService{
+		hub:           hub,
+		pendingPushes: make(map[string]pendingPush),
+	}
+	userID := uuid.NewString()
+	sender, _ := newTestWsClient(t, hub, userID, uuid.NewString())
+	other, _ := newTestWsClient(t, hub, userID, uuid.NewString())
+	pushID := "push-1"
+	done := make(chan struct{})
+	service.pendingPushes[pushID] = pendingPush{client: sender, done: done}
+
+	service.HandleMessage(other, ws.ClientMessage{
+		Type:          "notification.push-ack",
+		CorrelationID: &pushID,
+	})
+	select {
+	case <-done:
+		t.Fatal("ack from another connection must be ignored")
+	default:
+	}
+
+	service.HandleMessage(sender, ws.ClientMessage{
+		Type:          "notification.push-ack",
+		CorrelationID: &pushID,
+	})
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("expected matching ack to resolve pending push")
+	}
+}
+
 func newTestWsClient(t *testing.T, hub *ws.Hub, userID string, deviceID string) (*ws.Client, *websocket.Conn) {
 	t.Helper()
 
@@ -159,7 +215,7 @@ func newTestWsClient(t *testing.T, hub *ws.Hub, userID string, deviceID string) 
 			return
 		}
 
-		client, err := ws.NewClient(conn, userID, deviceID, "test-device", "test", "1.0.0", nil, nil)
+		client, err := ws.NewClient(conn, userID, deviceID, "test-device", "test", "1.0.0", "1.0.0", nil, nil, nil)
 		if err != nil {
 			t.Errorf("new websocket client: %v", err)
 			_ = conn.Close()

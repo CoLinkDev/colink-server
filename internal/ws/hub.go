@@ -66,16 +66,19 @@ func (h *Hub) Broadcast(userID string, excludeDeviceID string, message any) {
 }
 
 func (h *Hub) SendToDevice(userID string, deviceID string, message any) bool {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-
-	client, ok := h.clients[userID][deviceID]
-	if !ok {
+	client := h.ClientForDevice(userID, deviceID)
+	if client == nil {
 		return false
 	}
 
-	client.Send(message)
-	return true
+	return client.Send(message)
+}
+
+func (h *Hub) ClientForDevice(userID string, deviceID string) *Client {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	return h.clients[userID][deviceID]
 }
 
 func (h *Hub) ClientsForUser(userID string, excludeDeviceID string) []*Client {

@@ -16,6 +16,8 @@ type Client struct {
 	deviceName      string
 	deviceType      string
 	businessVersion string
+	wsVersion       string
+	advertisedWsVersion *string
 	send            chan any
 	process         func(*Client, ClientMessage)
 	onDisconnect    func(*Client)
@@ -32,6 +34,8 @@ func NewClient(
 	deviceName string,
 	deviceType string,
 	businessVersion string,
+	wsVersion string,
+	advertisedWsVersion *string,
 	process func(*Client, ClientMessage),
 	onDisconnect func(*Client),
 ) (*Client, error) {
@@ -48,6 +52,8 @@ func NewClient(
 		deviceName:      deviceName,
 		deviceType:      deviceType,
 		businessVersion: businessVersion,
+		wsVersion:       wsVersion,
+		advertisedWsVersion: advertisedWsVersion,
 		send:            make(chan any, 32),
 		process:         process,
 		onDisconnect:    onDisconnect,
@@ -94,18 +100,21 @@ func (c *Client) WritePump() {
 	}
 }
 
-func (c *Client) Send(message any) {
+func (c *Client) Send(message any) bool {
 	c.stateMu.RLock()
 	if c.closed {
 		c.stateMu.RUnlock()
-		return
+		return false
 	}
-	c.stateMu.RUnlock()
 
 	select {
 	case c.send <- message:
+		c.stateMu.RUnlock()
+		return true
 	default:
+		c.stateMu.RUnlock()
 		c.Close()
+		return false
 	}
 }
 
@@ -141,6 +150,19 @@ func (c *Client) DeviceType() string {
 
 func (c *Client) BusinessVersion() string {
 	return c.businessVersion
+}
+
+func (c *Client) WsVersion() string {
+	return c.wsVersion
+}
+
+func (c *Client) AdvertisedWsVersion() *string {
+	return c.advertisedWsVersion
+}
+
+func (c *Client) SupportsPushNotifications() bool {
+	version, ok := ParseSemver(c.wsVersion)
+	return ok && version.Major == 1 && (version.Minor > 1 || version.Minor == 1 && version.Patch >= 0)
 }
 
 func (c *Client) handleDisconnect() {

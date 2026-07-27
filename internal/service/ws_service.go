@@ -16,7 +16,12 @@ import (
 	"colink-server/internal/ws"
 )
 
-const lastSeenUpdateInterval = time.Minute
+const (
+	lastSeenUpdateInterval       = time.Minute
+	cloudWebSocketProtocolMajor  = 1
+	defaultCloudWebSocketVersion = "1.0.0"
+	pushAcknowledgementTimeout   = 10 * time.Second
+)
 
 type TicketResult struct {
 	Ticket    string `json:"ticket"`
@@ -30,6 +35,11 @@ type WsSession struct {
 	DeviceType string
 }
 
+type pendingPush struct {
+	client *ws.Client
+	done   chan struct{}
+}
+
 type WsService struct {
 	deviceRepo      *repository.DeviceRepository
 	ticketRepo      *repository.TicketRepository
@@ -39,6 +49,8 @@ type WsService struct {
 	ticketLimitByID map[string][]time.Time
 	lastSeenMu      sync.Mutex
 	lastSeenByID    map[uuid.UUID]time.Time
+	pendingPushMu   sync.Mutex
+	pendingPushes   map[string]pendingPush
 }
 
 func NewWsService(
@@ -54,6 +66,7 @@ func NewWsService(
 		ticketTTL:       ticketTTL,
 		ticketLimitByID: make(map[string][]time.Time),
 		lastSeenByID:    make(map[uuid.UUID]time.Time),
+		pendingPushes:   make(map[string]pendingPush),
 	}
 }
 
@@ -125,11 +138,21 @@ func (s *WsService) ValidateBusinessVersion(version string) error {
 	return nil
 }
 
+func (s *WsService) ValidateCloudWebSocketVersion(version string) (string, error) {
+	parsed, ok := ws.ParseSemver(version)
+	if !ok {
+		return defaultCloudWebSocketVersion, nil
+	}
+	if parsed.Major != cloudWebSocketProtocolMajor {
+		return "", pkg.NewAppError(http.StatusBadRequest, pkg.CodeInvalidParameter, "incompatible wsVersion")
+	}
+	return version, nil
+}
+
 func (s *WsService) HandleConnected(client *ws.Client) {
 	s.refreshLastSeen(client.DeviceUUID(), time.Now().UTC(), true)
-	if s.hub.Register(client) {
-		s.broadcastOnline(client)
-	}
+	s.hub.Register(client)
+	s.broadcastOnline(client)
 	s.sendOnlineCatchup(client)
 }
 
@@ -156,7 +179,80 @@ func (s *WsService) HandleMessage(client *ws.Client, message ws.ClientMessage) {
 		s.handleRelay(client, message)
 	case "broadcast":
 		s.handleBroadcast(client, message)
+	case "notification.push-ack":
+		s.handlePushAcknowledgement(client, message.CorrelationID)
 	}
+}
+
+func (s *WsService) DeliverPush(userID string, deviceID string, payload ws.PushNotificationPayload) error {
+	if _, err := ensureOwnedDevice(s.deviceRepo, userID, deviceID); err != nil {
+		return err
+	}
+
+	client := s.hub.ClientForDevice(userID, deviceID)
+	if client == nil {
+		return pkg.NewAppError(http.StatusOK, pkg.CodePushDeviceOffline, "device offline")
+	}
+	if !client.SupportsPushNotifications() {
+		return pkg.NewAppError(http.StatusOK, pkg.CodePushNotSupported, "push not supported")
+	}
+
+	pushID := uuid.NewString()
+	pending := pendingPush{
+		client: client,
+		done:   make(chan struct{}),
+	}
+	s.pendingPushMu.Lock()
+	s.pendingPushes[pushID] = pending
+	s.pendingPushMu.Unlock()
+
+	if !client.Send(ws.PushEnvelope{
+		ID:            pushID,
+		Type:          "notification.push",
+		From:          nil,
+		To:            deviceID,
+		CorrelationID: nil,
+		Payload:       payload,
+		Timestamp:     time.Now().UTC().UnixMilli(),
+	}) {
+		s.removePendingPush(pushID, pending)
+		return pkg.NewAppError(http.StatusOK, pkg.CodePushDeviceOffline, "device offline")
+	}
+
+	timer := time.NewTimer(pushAcknowledgementTimeout)
+	defer timer.Stop()
+	select {
+	case <-pending.done:
+		return nil
+	case <-timer.C:
+		s.removePendingPush(pushID, pending)
+		return pkg.NewAppError(http.StatusOK, pkg.CodePushTimeout, "push timeout")
+	}
+}
+
+func (s *WsService) handlePushAcknowledgement(client *ws.Client, correlationID *string) {
+	if correlationID == nil || *correlationID == "" {
+		return
+	}
+
+	s.pendingPushMu.Lock()
+	pending, ok := s.pendingPushes[*correlationID]
+	if !ok || pending.client != client {
+		s.pendingPushMu.Unlock()
+		return
+	}
+	delete(s.pendingPushes, *correlationID)
+	close(pending.done)
+	s.pendingPushMu.Unlock()
+}
+
+func (s *WsService) removePendingPush(pushID string, expected pendingPush) {
+	s.pendingPushMu.Lock()
+	current, ok := s.pendingPushes[pushID]
+	if ok && current.client == expected.client && current.done == expected.done {
+		delete(s.pendingPushes, pushID)
+	}
+	s.pendingPushMu.Unlock()
 }
 
 func (s *WsService) refreshLastSeen(deviceID uuid.UUID, at time.Time, force bool) {
@@ -251,6 +347,7 @@ func (s *WsService) broadcastOnline(client *ws.Client) {
 			Name:            client.DeviceName(),
 			Type:            client.DeviceType(),
 			BusinessVersion: client.BusinessVersion(),
+			WsVersion:       client.AdvertisedWsVersion(),
 		},
 		Timestamp: time.Now().UTC().UnixMilli(),
 	})
@@ -268,6 +365,7 @@ func (s *WsService) sendOnlineCatchup(client *ws.Client) {
 				Name:            peer.DeviceName(),
 				Type:            peer.DeviceType(),
 				BusinessVersion: peer.BusinessVersion(),
+				WsVersion:       peer.AdvertisedWsVersion(),
 			},
 			Timestamp: now,
 		})

@@ -24,6 +24,9 @@ const (
 	CodeInvalidDeviceKey   = 2003
 	CodeDeviceIDConflict   = 2004
 	CodeDeviceNotFound     = 2010
+	CodePushDeviceOffline  = 2011
+	CodePushNotSupported   = 2012
+	CodePushTimeout        = 2013
 
 	CodeUpdatePlatformNotSupported = 5001
 	CodeUpdateReleaseNotFound      = 5002
