@@ -29,9 +29,13 @@ go.work.sum
 config.local.yaml
 data/
 
-# Frontend dist (built externally, only placeholder committed)
+# Embedded frontend dist (generated during frontend/Docker builds)
 internal/handler/frontend/dist/*
 !internal/handler/frontend/dist/embed-placeholder.txt
+
+# Frontend dependencies and build output
+web/console/node_modules/
+web/console/dist/
 
 # Editor/IDE
 # .idea/

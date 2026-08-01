@@ -1,6 +1,6 @@
 APP=colink-server
 
-.PHONY: run test tidy fmt docker-up docker-down
+.PHONY: run test tidy fmt docker-up docker-down frontend-install frontend-dev frontend-test frontend-build
 
 run:
 	go run ./cmd/server
@@ -19,3 +19,15 @@ docker-up:
 
 docker-down:
 	docker compose -f docker-compose.dev.yml down
+
+frontend-install:
+	pnpm --dir web/console install --frozen-lockfile
+
+frontend-dev:
+	pnpm --dir web/console run dev
+
+frontend-test:
+	pnpm --dir web/console run test
+
+frontend-build:
+	pnpm --dir web/console run build

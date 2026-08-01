@@ -1,0 +1,15 @@
+.git
+.github
+.temp
+tmp
+data
+.env
+.env.*
+*.local
+config.local.yaml
+
+web/console/node_modules
+web/console/dist
+internal/handler/frontend/dist
+
+*.log

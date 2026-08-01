@@ -1,0 +1,97 @@
+export default {
+  login: {
+    welcome: 'おかえりなさい',
+    subtitle: 'CoLink アカウントにログイン',
+    email: 'メールアドレス',
+    identifier: 'メールアドレスまたはユーザー名',
+    identifierPlaceholder: 'メールアドレスまたはユーザー名を入力',
+    password: 'パスワード',
+    signIn: 'ログイン',
+    noAccount: "アカウントをお持ちでないですか？",
+    createOne: 'アカウント作成',
+    tagline: 'すべてのデバイスをつなぎ、シームレスに連携します。',
+    loginFailed: 'ログイン失敗',
+    checkCredentials: 'メールアドレスまたはパスワードを確認してください。',
+    connectionError: 'サーバーへの接続エラー。'
+  },
+  register: {
+    title: 'アカウント作成',
+    subtitle: 'CoLink に参加してデバイスを接続しましょう',
+    username: 'ユーザー名',
+    confirmPassword: 'パスワード（確認）',
+    register: '登録',
+    hasAccount: 'すでにアカウントをお持ちですか？',
+    signIn: 'ログイン',
+    registerFailed: '登録失敗',
+    tryAgain: 'もう一度お試しください。',
+    connectionError: 'サーバーへの接続エラー。'
+  },
+  nav: {
+    devices: 'デバイス管理',
+    settings: '設定',
+    logout: 'ログアウト',
+  },
+  devices: {
+    name: 'デバイス名',
+    platform: 'プラットフォーム',
+    status: '状態',
+    lastSeen: '最終オンライン',
+    actions: '操作'
+  },
+  dashboard: {
+    title: 'デバイス管理',
+    subtitle: '接続された设备とアクセス権限を管理します。',
+    noDevices: 'デバイスが見つかりません',
+    noDevicesHint: 'まだデバイスが接続されていません。開始するには、お使いのデバイスに CoLink アプリをダウンロードしてください。',
+    online: 'オンライン',
+    offline: 'オフライン',
+    unnamedDevice: '未命名のデバイス',
+    unknownPlatform: '不明なプラットフォーム',
+    removeDeviceConfirm: 'このデバイスを削除してもよろしいですか？',
+    removeDeviceFailed: 'デバイスの削除に失敗しました',
+    sendPush: 'プッシュを送信',
+    pushTo: '{device} に通知を送信します。',
+    pushTitle: 'タイトル',
+    pushTitlePlaceholder: '通知タイトル（任意）',
+    pushBody: 'メッセージ',
+    pushBodyPlaceholder: '通知メッセージ（任意）',
+    pushSent: 'プッシュを送信しました',
+    pushFailed: 'プッシュの送信に失敗しました'
+  },
+  settings: {
+    title: 'アカウント設定',
+    subtitle: 'アカウント情報を更新し、アカウントを管理します。',
+    changeUsername: 'ユーザー名の変更',
+    usernameHint: 'ユーザー名はログインとアプリ内表示の両方に使います。',
+    updateUsername: 'ユーザー名を更新',
+    usernameUpdated: 'ユーザー名を更新しました。',
+    usernameUpdateFailed: 'ユーザー名の更新に失敗しました',
+    changePassword: 'パスワードの変更',
+    changePasswordHint: 'セキュリティ確保のため、アカウントのパスワードを更新します。',
+    currentPassword: '現在のパスワード',
+    newPassword: '新しいパスワード',
+    confirmNewPassword: '新しいパスワード（確認）',
+    updatePassword: 'パスワードを更新',
+    signOut: 'ログアウト',
+    passwordMismatch: '新しいパスワードが一致しません',
+    passwordUpdated: 'パスワードが正常に更新されました。再度ログインしてください。',
+    passwordUpdateFailed: 'パスワードの更新に失敗しました',
+    signOutConfirm: '本当にログアウトしますか？'
+  },
+
+  common: {
+    confirm: '確認',
+    cancel: 'キャンセル',
+    ok: '確定',
+    never: 'なし',
+    remove: '削除',
+    refresh: '更新',
+    selectLanguage: '言語の選択',
+  },
+  theme: {
+    title: 'テーマ',
+    light: 'ライト',
+    dark: 'ダーク',
+    auto: '自動'
+  }
+}

@@ -10,6 +10,14 @@ Backend API server, WebSocket relay, and update service for CoLink.
 docker compose -f docker-compose.dev.yml up -d --build
 ```
 
+The server container serves the production console. For frontend development, run
+the Vite development server from another terminal:
+
+```sh
+pnpm --dir web/console install --frozen-lockfile
+pnpm --dir web/console dev
+```
+
 To use a specific `.env` file:
 
 ```sh
@@ -38,6 +46,9 @@ cp .env.example .env
 docker compose pull
 docker compose up -d
 ```
+
+The Docker image builds the Vue console from `web/console` and embeds its `dist`
+output into the server binary.
 
 ## Environment Variables
 

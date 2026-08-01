@@ -1,0 +1,97 @@
+export default {
+  login: {
+    welcome: '欢迎回来',
+    subtitle: '登录您的 CoLink 账户',
+    email: '邮箱',
+    identifier: '邮箱或用户名',
+    identifierPlaceholder: '输入邮箱或用户名',
+    password: '密码',
+    signIn: '登录',
+    noAccount: "没有账户？",
+    createOne: '创建一个',
+    tagline: '连接您的所有设备，实现无缝协作。',
+    loginFailed: '登录失败',
+    checkCredentials: '请检查您的账号密码。',
+    connectionError: '连接服务器时出错。'
+  },
+  register: {
+    title: '创建账户',
+    subtitle: '加入 CoLink 连接您的设备',
+    username: '用户名',
+    confirmPassword: '确认密码',
+    register: '注册',
+    hasAccount: '已经有账户了？',
+    signIn: '登录',
+    registerFailed: '注册失败',
+    tryAgain: '请稍后重试。',
+    connectionError: '连接服务器时出错。'
+  },
+  nav: {
+    devices: '设备管理',
+    settings: '设置',
+    logout: '注销',
+  },
+  devices: {
+    name: '设备名称',
+    platform: '平台',
+    status: '状态',
+    lastSeen: '上次可见时间',
+    actions: '操作'
+  },
+  dashboard: {
+    title: '设备管理',
+    subtitle: '管理您已连接的设备及访问权限。',
+    noDevices: '未找到设备',
+    noDevicesHint: "您尚未连接任何设备。请在您的设备上下载 CoLink 应用以开始使用。",
+    online: '在线',
+    offline: '离线',
+    unnamedDevice: '未知设备',
+    unknownPlatform: '未知平台',
+    removeDeviceConfirm: '您确定要移除该设备吗？',
+    removeDeviceFailed: '移除设备失败',
+    sendPush: '发送推送',
+    pushTo: '向 {device} 发送通知。',
+    pushTitle: '标题',
+    pushTitlePlaceholder: '可选的通知标题',
+    pushBody: '内容',
+    pushBodyPlaceholder: '可选的通知内容',
+    pushSent: '推送已发送',
+    pushFailed: '发送推送失败'
+  },
+  settings: {
+    title: '账户设置',
+    subtitle: '更新账户信息并管理您的账户。',
+    changeUsername: '修改用户名',
+    usernameHint: '用户名会用于登录，也会作为应用内显示名称。',
+    updateUsername: '更新用户名',
+    usernameUpdated: '用户名更新成功。',
+    usernameUpdateFailed: '更新用户名失败',
+    changePassword: '修改密码',
+    changePasswordHint: '更新您的账户密码以确保安全性。',
+    currentPassword: '当前密码',
+    newPassword: '新密码',
+    confirmNewPassword: '确认新密码',
+    updatePassword: '更新密码',
+    signOut: '注销账户',
+    passwordMismatch: '新密码不一致',
+    passwordUpdated: '密码更新成功，请重新登录。',
+    passwordUpdateFailed: '更新密码失败',
+    signOutConfirm: '您确定要注销登录吗？'
+  },
+
+  common: {
+    confirm: '确认',
+    cancel: '取消',
+    ok: '确定',
+    never: '从不',
+    remove: '移除',
+    refresh: '刷新',
+    selectLanguage: '选择语言',
+  },
+  theme: {
+    title: '外观',
+    light: '浅色',
+    dark: '深色',
+    auto: '自动'
+  }
+}
