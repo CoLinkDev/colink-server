@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -108,6 +110,7 @@ type UpdateAsset struct {
 	Name        string `json:"name"`
 	Size        int64  `json:"size"`
 	DownloadURL string `json:"downloadUrl"`
+	SHA256      string `json:"sha256,omitempty"`
 }
 
 type TauriManifest struct {
@@ -116,6 +119,7 @@ type TauriManifest struct {
 	PubDate   string `json:"pub_date"`
 	Signature string `json:"signature"`
 	URL       string `json:"url"`
+	SHA256    string `json:"sha256,omitempty"`
 }
 
 type UpdateService struct {
@@ -278,6 +282,7 @@ func (s *UpdateService) GetTauriManifest(target, arch, currentVersion string) (*
 		PubDate:   release.PublishedAt.UTC().Format(time.RFC3339Nano),
 		Signature: strings.TrimSpace(string(signatureText)),
 		URL:       buildDownloadURL(release.Platform, release.Version, archive.FileName),
+		SHA256:    archive.SHA256,
 	}, nil
 }
 
@@ -455,17 +460,26 @@ func (s *UpdateService) cacheAssets(ctx context.Context, platform, version strin
 		}
 		filePath := filepath.Join(targetDir, fileName)
 		existingAsset, exists := existingAssets[fileName]
-		if err := s.ensureAssetCached(ctx, asset, filePath, assetNeedsRefresh(asset, existingAsset, exists)); err != nil {
+		downloaded, err := s.ensureAssetCached(ctx, asset, filePath, assetNeedsRefresh(asset, existingAsset, exists))
+		if err != nil {
 			return nil, err
 		}
 		info, err := os.Stat(filePath)
 		if err != nil {
 			return nil, err
 		}
+		sha256 := strings.TrimSpace(existingAsset.SHA256)
+		if downloaded || sha256 == "" {
+			sha256, err = sha256File(filePath)
+			if err != nil {
+				return nil, err
+			}
+		}
 		cached = append(cached, model.ReleaseAsset{
-			FileName: fileName,
-			FileSize: info.Size(),
-			FilePath: filePath,
+			FileName:        fileName,
+			FileSize:        info.Size(),
+			FilePath:        filePath,
+			SHA256:          sha256,
 			SourceUpdatedAt: &asset.UpdatedAt,
 		})
 	}
@@ -477,31 +491,34 @@ func assetNeedsRefresh(asset githubAsset, existing model.ReleaseAsset, exists bo
 	return !exists || existing.SourceUpdatedAt == nil || !asset.UpdatedAt.Equal(*existing.SourceUpdatedAt)
 }
 
-func (s *UpdateService) ensureAssetCached(ctx context.Context, asset githubAsset, filePath string, refresh bool) error {
+func (s *UpdateService) ensureAssetCached(ctx context.Context, asset githubAsset, filePath string, refresh bool) (bool, error) {
 	if !refresh {
 		if info, err := os.Stat(filePath); err == nil && asset.Size >= 0 && info.Size() == asset.Size {
-			return nil
+			return false, nil
 		}
 	}
 
 	tmpPath := filePath + ".tmp"
 	if err := s.downloadAsset(ctx, asset, tmpPath); err != nil {
 		_ = os.Remove(tmpPath)
-		return err
+		return false, err
 	}
 	if asset.Size >= 0 {
 		info, err := os.Stat(tmpPath)
 		if err != nil {
 			_ = os.Remove(tmpPath)
-			return err
+			return false, err
 		}
 		if info.Size() != asset.Size {
 			_ = os.Remove(tmpPath)
-			return fmt.Errorf("asset size mismatch for %s: got %d want %d", asset.Name, info.Size(), asset.Size)
+			return false, fmt.Errorf("asset size mismatch for %s: got %d want %d", asset.Name, info.Size(), asset.Size)
 		}
 	}
 	_ = os.Remove(filePath)
-	return os.Rename(tmpPath, filePath)
+	if err := os.Rename(tmpPath, filePath); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (s *UpdateService) removeStaleAssets(assets []model.ReleaseAsset) {
@@ -542,6 +559,20 @@ func (s *UpdateService) downloadAsset(ctx context.Context, asset githubAsset, tm
 	return err
 }
 
+func sha256File(filePath string) (string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, file); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hasher.Sum(nil)), nil
+}
+
 func releaseResult(release *model.AppRelease, asset model.ReleaseAsset) *UpdateRelease {
 	return &UpdateRelease{
 		Version:      release.Version,
@@ -551,6 +582,7 @@ func releaseResult(release *model.AppRelease, asset model.ReleaseAsset) *UpdateR
 			Name:        asset.FileName,
 			Size:        asset.FileSize,
 			DownloadURL: buildDownloadURL(release.Platform, release.Version, asset.FileName),
+			SHA256:      asset.SHA256,
 		}},
 	}
 }

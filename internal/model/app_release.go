@@ -21,6 +21,7 @@ type ReleaseAsset struct {
 	FileName        string    `gorm:"size:255;not null;uniqueIndex:idx_asset_release_file"`
 	FileSize        int64     `gorm:"not null"`
 	FilePath        string    `gorm:"size:500;not null"`
+	SHA256          string    `gorm:"column:sha256;size:64"`
 	SourceUpdatedAt *time.Time `gorm:"type:timestamptz"`
 	CreatedAt       time.Time `gorm:"not null;default:now()"`
 }

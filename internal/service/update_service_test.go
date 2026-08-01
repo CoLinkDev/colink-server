@@ -1,6 +1,9 @@
 package service
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -136,6 +139,42 @@ func TestSelectTauriAssets(t *testing.T) {
 				t.Fatalf("signature present = %t, want %t", signature != nil, test.wantSignature)
 			}
 		})
+	}
+}
+
+func TestSha256File(t *testing.T) {
+	filePath := filepath.Join(t.TempDir(), "asset.bin")
+	if err := os.WriteFile(filePath, []byte("hello"), 0o600); err != nil {
+		t.Fatalf("write test asset: %v", err)
+	}
+
+	got, err := sha256File(filePath)
+	if err != nil {
+		t.Fatalf("sha256File: %v", err)
+	}
+
+	const want = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+	if got != want {
+		t.Fatalf("sha256File() = %q, want %q", got, want)
+	}
+}
+
+func TestEnsureAssetCachedReportsDownloads(t *testing.T) {
+	service := &UpdateService{}
+	filePath := filepath.Join(t.TempDir(), "asset.bin")
+	if err := os.WriteFile(filePath, []byte("hello"), 0o600); err != nil {
+		t.Fatalf("write cached asset: %v", err)
+	}
+
+	downloaded, err := service.ensureAssetCached(context.Background(), githubAsset{
+		Name: "asset.bin",
+		Size: 5,
+	}, filePath, false)
+	if err != nil {
+		t.Fatalf("ensureAssetCached: %v", err)
+	}
+	if downloaded {
+		t.Fatal("ensureAssetCached reported a download for a valid cached asset")
 	}
 }
 

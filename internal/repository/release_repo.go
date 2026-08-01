@@ -91,6 +91,7 @@ func (r *ReleaseRepository) CreateOrUpdateWithAssets(release *model.AppRelease, 
 			if err := tx.Model(&storedAsset).Updates(map[string]any{
 				"file_size":         asset.FileSize,
 				"file_path":         asset.FilePath,
+				"sha256":            asset.SHA256,
 				"source_updated_at": asset.SourceUpdatedAt,
 			}).Error; err != nil {
 				return err
