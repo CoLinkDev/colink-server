@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 
 	"colink-server/internal/model"
@@ -51,6 +52,9 @@ type WsService struct {
 	lastSeenByID    map[uuid.UUID]time.Time
 	pendingPushMu   sync.Mutex
 	pendingPushes   map[string]pendingPush
+	connectedAtMu   sync.Mutex
+	connectedAt     map[*ws.Client]time.Time
+	log             *zap.Logger
 }
 
 func NewWsService(
@@ -58,6 +62,7 @@ func NewWsService(
 	ticketRepo *repository.TicketRepository,
 	hub *ws.Hub,
 	ticketTTL time.Duration,
+	log *zap.Logger,
 ) *WsService {
 	return &WsService{
 		deviceRepo:      deviceRepo,
@@ -67,6 +72,8 @@ func NewWsService(
 		ticketLimitByID: make(map[string][]time.Time),
 		lastSeenByID:    make(map[uuid.UUID]time.Time),
 		pendingPushes:   make(map[string]pendingPush),
+		connectedAt:     make(map[*ws.Client]time.Time),
+		log:             log,
 	}
 }
 
@@ -78,6 +85,7 @@ func (s *WsService) IssueTicket(userID string, deviceID string) (*TicketResult, 
 
 	now := time.Now().UTC()
 	if !s.allowTicketIssue(userID, now) {
+		s.logger().Warn("websocket ticket rate limited", zap.String("user_id", shortID(userID)))
 		return nil, pkg.NewAppError(http.StatusTooManyRequests, pkg.CodeRateLimited, "rate limited")
 	}
 
@@ -95,6 +103,12 @@ func (s *WsService) IssueTicket(userID string, deviceID string) (*TicketResult, 
 	if err := s.ticketRepo.Create(record); err != nil {
 		return nil, pkg.InternalError(err)
 	}
+	s.logger().Info(
+		"websocket ticket issued",
+		zap.String("user_id", shortID(userID)),
+		zap.String("device_id", shortID(deviceID)),
+		zap.Duration("ttl", s.ticketTTL),
+	)
 
 	return &TicketResult{
 		Ticket:    ticketValue,
@@ -104,12 +118,14 @@ func (s *WsService) IssueTicket(userID string, deviceID string) (*TicketResult, 
 
 func (s *WsService) ConsumeTicket(ticket string) (*WsSession, error) {
 	if ticket == "" {
+		s.logger().Warn("websocket ticket rejected", zap.String("reason", "missing"))
 		return nil, pkg.NewAppError(http.StatusUnauthorized, pkg.CodeUnauthorized, "unauthorized")
 	}
 
 	record, err := s.ticketRepo.ConsumeValid(ticket, time.Now().UTC())
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			s.logger().Warn("websocket ticket rejected", zap.String("reason", "invalid_or_expired"))
 			return nil, pkg.NewAppError(http.StatusUnauthorized, pkg.CodeUnauthorized, "unauthorized")
 		}
 		return nil, pkg.InternalError(err)
@@ -118,6 +134,7 @@ func (s *WsService) ConsumeTicket(ticket string) (*WsSession, error) {
 	device, err := s.deviceRepo.FindByIDAndUserID(record.DeviceID, record.UserID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			s.logger().Warn("websocket ticket rejected", zap.String("reason", "device_missing"))
 			return nil, pkg.NewAppError(http.StatusUnauthorized, pkg.CodeUnauthorized, "unauthorized")
 		}
 		return nil, pkg.InternalError(err)
@@ -150,6 +167,17 @@ func (s *WsService) ValidateCloudWebSocketVersion(version string) (string, error
 }
 
 func (s *WsService) HandleConnected(client *ws.Client) {
+	s.connectedAtMu.Lock()
+	s.connectedAt[client] = time.Now().UTC()
+	s.connectedAtMu.Unlock()
+	s.logger().Info(
+		"websocket connected",
+		zap.String("user_id", shortID(client.UserID())),
+		zap.String("device_id", shortID(client.DeviceID())),
+		zap.String("device_type", client.DeviceType()),
+		zap.String("business_version", client.BusinessVersion()),
+		zap.String("ws_version", client.WsVersion()),
+	)
 	s.refreshLastSeen(client.DeviceUUID(), time.Now().UTC(), true)
 	s.hub.Register(client)
 	s.broadcastOnline(client)
@@ -157,9 +185,21 @@ func (s *WsService) HandleConnected(client *ws.Client) {
 }
 
 func (s *WsService) HandleDisconnect(client *ws.Client) {
+	s.connectedAtMu.Lock()
+	connectedAt := s.connectedAt[client]
+	delete(s.connectedAt, client)
+	s.connectedAtMu.Unlock()
 	if !s.hub.Unregister(client) {
 		return
 	}
+	fields := []zap.Field{
+		zap.String("user_id", shortID(client.UserID())),
+		zap.String("device_id", shortID(client.DeviceID())),
+	}
+	if !connectedAt.IsZero() {
+		fields = append(fields, zap.Duration("duration", time.Since(connectedAt)))
+	}
+	s.logger().Info("websocket disconnected", fields...)
 
 	s.refreshLastSeen(client.DeviceUUID(), time.Now().UTC(), true)
 	s.broadcastOffline(client)
@@ -216,6 +256,7 @@ func (s *WsService) DeliverPush(userID string, deviceID string, payload ws.PushN
 		Timestamp:     time.Now().UTC().UnixMilli(),
 	}) {
 		s.removePendingPush(pushID, pending)
+		s.logger().Warn("push delivery failed", zap.String("device_id", shortID(deviceID)), zap.String("reason", "send_queue_closed"))
 		return pkg.NewAppError(http.StatusOK, pkg.CodePushDeviceOffline, "device offline")
 	}
 
@@ -223,9 +264,11 @@ func (s *WsService) DeliverPush(userID string, deviceID string, payload ws.PushN
 	defer timer.Stop()
 	select {
 	case <-pending.done:
+		s.logger().Info("push delivered", zap.String("device_id", shortID(deviceID)))
 		return nil
 	case <-timer.C:
 		s.removePendingPush(pushID, pending)
+		s.logger().Warn("push delivery timed out", zap.String("device_id", shortID(deviceID)))
 		return pkg.NewAppError(http.StatusOK, pkg.CodePushTimeout, "push timeout")
 	}
 }
@@ -271,7 +314,9 @@ func (s *WsService) refreshLastSeen(deviceID uuid.UUID, at time.Time, force bool
 		s.lastSeenMu.Unlock()
 	}
 
-	_ = s.deviceRepo.UpdateLastSeen(deviceID, at)
+	if err := s.deviceRepo.UpdateLastSeen(deviceID, at); err != nil {
+		s.logger().Warn("device last seen update failed", zap.String("device_id", shortID(deviceID.String())), zap.Error(err))
+	}
 }
 
 func (s *WsService) allowTicketIssue(userID string, now time.Time) bool {
@@ -301,15 +346,17 @@ func (s *WsService) allowTicketIssue(userID string, now time.Time) bool {
 
 func (s *WsService) handleRelay(client *ws.Client, message ws.ClientMessage) {
 	if message.To == nil {
+		s.logger().Warn("websocket relay rejected", zap.String("from_device_id", shortID(client.DeviceID())), zap.String("reason", "missing_target"))
 		return
 	}
 	if _, err := parseUUID(*message.To); err != nil {
+		s.logger().Warn("websocket relay rejected", zap.String("from_device_id", shortID(client.DeviceID())), zap.String("reason", "invalid_target"))
 		return
 	}
 
 	from := client.DeviceID()
 	to := *message.To
-	s.hub.SendToDevice(client.UserID(), to, ws.MessageEnvelope{
+	if !s.hub.SendToDevice(client.UserID(), to, ws.MessageEnvelope{
 		ID:            message.ID,
 		Type:          "relay",
 		From:          &from,
@@ -317,11 +364,14 @@ func (s *WsService) handleRelay(client *ws.Client, message ws.ClientMessage) {
 		CorrelationID: message.CorrelationID,
 		Payload:       json.RawMessage(message.Payload),
 		Timestamp:     time.Now().UTC().UnixMilli(),
-	})
+	}) {
+		s.logger().Debug("websocket relay target offline", zap.String("from_device_id", shortID(from)), zap.String("to_device_id", shortID(to)), zap.Int("payload_bytes", len(message.Payload)))
+	}
 }
 
 func (s *WsService) handleBroadcast(client *ws.Client, message ws.ClientMessage) {
 	if len(message.Payload) == 0 {
+		s.logger().Warn("websocket broadcast rejected", zap.String("from_device_id", shortID(client.DeviceID())), zap.String("reason", "empty_payload"))
 		return
 	}
 
@@ -335,6 +385,28 @@ func (s *WsService) handleBroadcast(client *ws.Client, message ws.ClientMessage)
 		Payload:       json.RawMessage(message.Payload),
 		Timestamp:     time.Now().UTC().UnixMilli(),
 	})
+}
+
+func (s *WsService) LogUpgradeFailure(err error) {
+	s.logger().Warn("websocket upgrade failed", zap.Error(err))
+}
+
+func (s *WsService) LogClientCreationFailure(err error) {
+	s.logger().Warn("websocket client initialization failed", zap.Error(err))
+}
+
+func (s *WsService) logger() *zap.Logger {
+	if s.log == nil {
+		return zap.NewNop()
+	}
+	return s.log
+}
+
+func shortID(value string) string {
+	if len(value) <= 8 {
+		return value
+	}
+	return value[:8]
 }
 
 func (s *WsService) broadcastOnline(client *ws.Client) {

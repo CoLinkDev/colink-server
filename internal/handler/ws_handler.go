@@ -70,6 +70,7 @@ func (h *WsHandler) Connect(c *gin.Context) {
 
 	conn, err := h.upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
+		h.wsService.LogUpgradeFailure(err)
 		return
 	}
 
@@ -86,6 +87,7 @@ func (h *WsHandler) Connect(c *gin.Context) {
 		h.wsService.HandleDisconnect,
 	)
 	if err != nil {
+		h.wsService.LogClientCreationFailure(err)
 		_ = conn.Close()
 		return
 	}
