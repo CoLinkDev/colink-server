@@ -8,6 +8,12 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+const (
+	webSocketPingInterval = 25 * time.Second
+	webSocketWriteTimeout = 10 * time.Second
+	webSocketPongTimeout  = 60 * time.Second
+)
+
 type Client struct {
 	conn            *websocket.Conn
 	userID          string
@@ -25,6 +31,7 @@ type Client struct {
 	disconnectOnce  sync.Once
 	stateMu         sync.RWMutex
 	closed          bool
+	pongTimeout     time.Duration
 }
 
 func NewClient(
@@ -57,12 +64,17 @@ func NewClient(
 		send:            make(chan any, 32),
 		process:         process,
 		onDisconnect:    onDisconnect,
+		pongTimeout:     webSocketPongTimeout,
 	}, nil
 }
 
 func (c *Client) ReadPump() {
 	defer c.handleDisconnect()
 	c.conn.SetReadLimit(1024 * 1024)
+	_ = c.conn.SetReadDeadline(time.Now().Add(c.pongTimeout))
+	c.conn.SetPongHandler(func(string) error {
+		return c.conn.SetReadDeadline(time.Now().Add(c.pongTimeout))
+	})
 
 	for {
 		var message ClientMessage
@@ -77,7 +89,7 @@ func (c *Client) ReadPump() {
 }
 
 func (c *Client) WritePump() {
-	ticker := time.NewTicker(25 * time.Second)
+	ticker := time.NewTicker(webSocketPingInterval)
 	defer ticker.Stop()
 	defer c.handleDisconnect()
 
@@ -87,13 +99,13 @@ func (c *Client) WritePump() {
 			if !ok {
 				return
 			}
-			_ = c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			_ = c.conn.SetWriteDeadline(time.Now().Add(webSocketWriteTimeout))
 			if err := c.conn.WriteJSON(message); err != nil {
 				return
 			}
 		case <-ticker.C:
-			_ = c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-			if err := c.conn.WriteControl(websocket.PingMessage, []byte("ping"), time.Now().Add(10*time.Second)); err != nil {
+			_ = c.conn.SetWriteDeadline(time.Now().Add(webSocketWriteTimeout))
+			if err := c.conn.WriteControl(websocket.PingMessage, []byte("ping"), time.Now().Add(webSocketWriteTimeout)); err != nil {
 				return
 			}
 		}
