@@ -10,6 +10,7 @@ import (
 
 type Config struct {
 	Server   ServerConfig
+	Device   DeviceConfig
 	Database DatabaseConfig
 	JWT      JWTConfig
 	WS       WSConfig
@@ -19,6 +20,10 @@ type Config struct {
 type ServerConfig struct {
 	Port int
 	Mode string
+}
+
+type DeviceConfig struct {
+	Limit int
 }
 
 type DatabaseConfig struct {
@@ -83,6 +88,19 @@ func envInt(key string, fallback int) int {
 	return fallback
 }
 
+func envPositiveInt(key string, fallback int) (int, error) {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return fallback, nil
+	}
+
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < 1 {
+		return 0, fmt.Errorf("%s must be a positive integer", key)
+	}
+	return value, nil
+}
+
 func envDuration(key string, fallback time.Duration) time.Duration {
 	if v := os.Getenv(key); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
@@ -114,10 +132,18 @@ func parseReposEnv(raw string) ([]GitHubRepoConfig, error) {
 }
 
 func Load() (*Config, error) {
+	deviceLimit, err := envPositiveInt("COLINK_DEVICE_LIMIT", 20)
+	if err != nil {
+		return nil, err
+	}
+
 	cfg := &Config{
 		Server: ServerConfig{
 			Port: envInt("COLINK_SERVER_PORT", 8080),
 			Mode: env("COLINK_SERVER_MODE", "debug"),
+		},
+		Device: DeviceConfig{
+			Limit: deviceLimit,
 		},
 		Database: DatabaseConfig{
 			Host:           env("COLINK_DATABASE_HOST", "localhost"),

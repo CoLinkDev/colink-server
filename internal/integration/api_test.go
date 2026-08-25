@@ -314,6 +314,7 @@ func newTestApp(t *testing.T, ticketTTL time.Duration) *testApp {
 
 	cfg := &config.Config{
 		Server: config.ServerConfig{Mode: gin.TestMode},
+		Device: config.DeviceConfig{Limit: 20},
 		Database: config.DatabaseConfig{
 			DBName: dbName,
 		},

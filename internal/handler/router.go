@@ -27,7 +27,7 @@ func NewMainRouter(cfg *config.Config, db *gorm.DB, log *zap.Logger) *gin.Engine
 		cfg.JWT.AccessTTL,
 		cfg.JWT.RefreshTTL,
 	)
-	deviceService := service.NewDeviceService(deviceRepo, hub)
+	deviceService := service.NewDeviceService(deviceRepo, hub, cfg.Device.Limit)
 	wsService := service.NewWsService(deviceRepo, ticketRepo, hub, cfg.WS.TicketTTL, log)
 
 	authHandler := NewAuthHandler(authService)
@@ -71,7 +71,7 @@ func NewRouter(cfg *config.Config, db *gorm.DB, log *zap.Logger) (*gin.Engine, *
 		cfg.JWT.AccessTTL,
 		cfg.JWT.RefreshTTL,
 	)
-	deviceService := service.NewDeviceService(deviceRepo, hub)
+	deviceService := service.NewDeviceService(deviceRepo, hub, cfg.Device.Limit)
 	wsService := service.NewWsService(deviceRepo, ticketRepo, hub, cfg.WS.TicketTTL, log)
 	updateService := service.NewUpdateService(releaseRepo, cfg.Update, log)
 

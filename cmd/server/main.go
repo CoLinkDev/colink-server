@@ -71,7 +71,12 @@ func main() {
 	}
 
 	go func() {
-		log.Info("server started", zap.Int("port", cfg.Server.Port), zap.String("mode", cfg.Server.Mode))
+		log.Info(
+			"server started",
+			zap.Int("port", cfg.Server.Port),
+			zap.String("mode", cfg.Server.Mode),
+			zap.Int("deviceLimit", cfg.Device.Limit),
+		)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal("listen server", zap.Error(err))
 		}

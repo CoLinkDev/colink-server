@@ -35,14 +35,16 @@ type DeviceListResult struct {
 }
 
 type DeviceService struct {
-	deviceRepo *repository.DeviceRepository
-	hub        *ws.Hub
+	deviceRepo  *repository.DeviceRepository
+	hub         *ws.Hub
+	deviceLimit int
 }
 
-func NewDeviceService(deviceRepo *repository.DeviceRepository, hub *ws.Hub) *DeviceService {
+func NewDeviceService(deviceRepo *repository.DeviceRepository, hub *ws.Hub, deviceLimit int) *DeviceService {
 	return &DeviceService{
-		deviceRepo: deviceRepo,
-		hub:        hub,
+		deviceRepo:  deviceRepo,
+		hub:         hub,
+		deviceLimit: deviceLimit,
 	}
 }
 
@@ -103,7 +105,7 @@ func (s *DeviceService) Register(userID string, deviceID string, name string, de
 	if err != nil {
 		return nil, pkg.InternalError(err)
 	}
-	if count >= 10 {
+	if count >= int64(s.deviceLimit) {
 		return nil, pkg.NewAppError(http.StatusConflict, pkg.CodeDeviceLimitReached, "device limit reached")
 	}
 	now := time.Now().UTC()
