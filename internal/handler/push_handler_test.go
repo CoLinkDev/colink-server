@@ -64,14 +64,14 @@ func TestParsePushRequestPathOverridesBodyTargetAndText(t *testing.T) {
 func TestPushRoutesRegisterWithoutPathConflicts(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	wsService := service.NewWsService(nil, nil, ws.NewHub(), time.Second, nil)
+	wsService := service.NewWsService(nil, nil, ws.NewHub(), time.Second, 20, nil)
 	registerMainRoutes(
 		router,
 		NewAuthHandler(nil),
 		NewDeviceHandler(nil),
 		NewMeHandler(nil),
-		NewWsHandler(wsService),
+		NewWsHandler(wsService, 8*1024*1024),
 		NewPushHandler(wsService),
-		middleware.NewAuthMiddleware("test-secret"),
+		middleware.NewAuthMiddleware("test-secret", nil),
 	)
 }

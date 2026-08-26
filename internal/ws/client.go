@@ -24,6 +24,7 @@ type Client struct {
 	businessVersion string
 	wsVersion       string
 	advertisedWsVersion *string
+	maxMessageBytes int64
 	send            chan any
 	process         func(*Client, ClientMessage)
 	onDisconnect    func(*Client)
@@ -43,6 +44,7 @@ func NewClient(
 	businessVersion string,
 	wsVersion string,
 	advertisedWsVersion *string,
+	maxMessageBytes int64,
 	process func(*Client, ClientMessage),
 	onDisconnect func(*Client),
 ) (*Client, error) {
@@ -61,6 +63,7 @@ func NewClient(
 		businessVersion: businessVersion,
 		wsVersion:       wsVersion,
 		advertisedWsVersion: advertisedWsVersion,
+		maxMessageBytes: maxMessageBytes,
 		send:            make(chan any, 32),
 		process:         process,
 		onDisconnect:    onDisconnect,
@@ -70,7 +73,7 @@ func NewClient(
 
 func (c *Client) ReadPump() {
 	defer c.handleDisconnect()
-	c.conn.SetReadLimit(1024 * 1024)
+	c.conn.SetReadLimit(c.maxMessageBytes)
 	_ = c.conn.SetReadDeadline(time.Now().Add(c.pongTimeout))
 	c.conn.SetPongHandler(func(string) error {
 		return c.conn.SetReadDeadline(time.Now().Add(c.pongTimeout))

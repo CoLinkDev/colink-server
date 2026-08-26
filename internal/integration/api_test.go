@@ -24,6 +24,7 @@ import (
 	"colink-server/internal/app"
 	"colink-server/internal/config"
 	"colink-server/internal/handler"
+	"colink-server/internal/pkg"
 )
 
 type testApp struct {
@@ -159,6 +160,32 @@ func TestAuthFlow(t *testing.T) {
 	}), http.StatusUnauthorized)
 }
 
+func TestDisabledAccountCannotAuthenticateOrRefresh(t *testing.T) {
+	app := newTestApp(t, 5*time.Second)
+	defer app.close()
+
+	auth := decodeOK[authResult](t, app.request(http.MethodPost, "/api/v1/auth/register", "", map[string]string{
+		"email":    "disabled@example.com",
+		"username": "disabled-user",
+		"password": "password123",
+	}))
+	if err := app.db.Table("users").Where("id = ?", auth.UserID).Update("disabled", true).Error; err != nil {
+		t.Fatalf("disable account: %v", err)
+	}
+
+	expectStatus(t, app.request(http.MethodGet, "/api/v1/me", bearer(auth.Token), nil), http.StatusUnauthorized)
+	expectErrorCode(t, app.request(http.MethodPost, "/api/v1/auth/refresh", "", map[string]string{
+		"refreshToken": auth.RefreshToken,
+	}), http.StatusForbidden, pkg.CodeAccountDisabled)
+
+	if err := app.db.Table("users").Where("id = ?", auth.UserID).Update("disabled", false).Error; err != nil {
+		t.Fatalf("enable account: %v", err)
+	}
+	expectStatus(t, app.request(http.MethodPost, "/api/v1/auth/refresh", "", map[string]string{
+		"refreshToken": auth.RefreshToken,
+	}), http.StatusUnauthorized)
+}
+
 func TestDeviceFlow(t *testing.T) {
 	app := newTestApp(t, 5*time.Second)
 	defer app.close()
@@ -180,6 +207,12 @@ func TestDeviceFlow(t *testing.T) {
 		"type":      "windows",
 		"publicKey": "QUJDRA==",
 	}))
+	expectStatus(t, app.request(http.MethodPost, "/api/v1/devices", bearer(owner.Token), map[string]string{
+		"deviceId":  "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+		"name":      strings.Repeat("设", 101),
+		"type":      "windows",
+		"publicKey": "QUJDRA==",
+	}), http.StatusBadRequest)
 
 	devices := decodeOK[deviceListResult](t, app.request(http.MethodGet, "/api/v1/devices", bearer(owner.Token), nil))
 	if len(devices.Devices) != 1 || devices.Devices[0].DeviceID != device.DeviceID {
@@ -193,6 +226,9 @@ func TestDeviceFlow(t *testing.T) {
 	expectStatus(t, app.request(http.MethodPut, "/api/v1/devices/"+device.DeviceID, bearer(owner.Token), map[string]string{
 		"name": "Home PC",
 	}), http.StatusOK)
+	expectStatus(t, app.request(http.MethodPut, "/api/v1/devices/"+device.DeviceID, bearer(owner.Token), map[string]string{
+		"name": strings.Repeat("设", 101),
+	}), http.StatusBadRequest)
 
 	time.Sleep(5 * time.Millisecond)
 	expectStatus(t, app.request(http.MethodPut, "/api/v1/devices/"+device.DeviceID+"/key", bearer(owner.Token), map[string]string{
@@ -324,7 +360,9 @@ func newTestApp(t *testing.T, ticketTTL time.Duration) *testApp {
 			RefreshTTL: 24 * time.Hour,
 		},
 		WS: config.WSConfig{
-			TicketTTL: ticketTTL,
+			TicketTTL:       ticketTTL,
+			TicketRateLimit: 20,
+			MaxMessageBytes: 8 * 1024 * 1024,
 		},
 	}
 
@@ -394,6 +432,23 @@ func expectStatus(t *testing.T, resp *http.Response, want int) {
 	if resp.StatusCode != want {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("expected status %d, got %d: %s", want, resp.StatusCode, string(body))
+	}
+}
+
+func expectErrorCode(t *testing.T, resp *http.Response, wantStatus int, wantCode int) {
+	t.Helper()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != wantStatus {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected status %d, got %d: %s", wantStatus, resp.StatusCode, string(body))
+	}
+	var payload envelope[any]
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if payload.Code != wantCode {
+		t.Fatalf("expected error code %d, got %d", wantCode, payload.Code)
 	}
 }
 

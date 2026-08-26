@@ -11,13 +11,15 @@ import (
 )
 
 type WsHandler struct {
-	wsService *service.WsService
-	upgrader  websocket.Upgrader
+	wsService      *service.WsService
+	maxMessageBytes int64
+	upgrader       websocket.Upgrader
 }
 
-func NewWsHandler(wsService *service.WsService) *WsHandler {
+func NewWsHandler(wsService *service.WsService, maxMessageBytes int64) *WsHandler {
 	return &WsHandler{
-		wsService: wsService,
+		wsService:       wsService,
+		maxMessageBytes: maxMessageBytes,
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
@@ -83,6 +85,7 @@ func (h *WsHandler) Connect(c *gin.Context) {
 		businessVersion,
 		wsVersion,
 		reportedWsVersion,
+		h.maxMessageBytes,
 		h.wsService.HandleMessage,
 		h.wsService.HandleDisconnect,
 	)

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -43,7 +44,9 @@ type JWTConfig struct {
 }
 
 type WSConfig struct {
-	TicketTTL time.Duration
+	TicketTTL       time.Duration
+	TicketRateLimit int
+	MaxMessageBytes int64
 }
 
 type UpdateConfig struct {
@@ -79,35 +82,57 @@ func env(key, fallback string) string {
 	return fallback
 }
 
-func envInt(key string, fallback int) int {
-	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			return n
-		}
-	}
-	return fallback
-}
-
-func envPositiveInt(key string, fallback int) (int, error) {
+func envInt(key string, fallback int) (int, error) {
 	raw := os.Getenv(key)
 	if raw == "" {
 		return fallback, nil
 	}
 
 	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be an integer: %q", key, raw)
+	}
+	return value, nil
+}
+
+func envPositiveInt(key string, fallback int) (int, error) {
+	value, err := envInt(key, fallback)
+	if err != nil {
+		return 0, err
+	}
+	if value < 1 {
+		return 0, fmt.Errorf("%s must be a positive integer", key)
+	}
+	return value, nil
+}
+
+func envPositiveInt64(key string, fallback int64) (int64, error) {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return fallback, nil
+	}
+
+	value, err := strconv.ParseInt(raw, 10, 64)
 	if err != nil || value < 1 {
 		return 0, fmt.Errorf("%s must be a positive integer", key)
 	}
 	return value, nil
 }
 
-func envDuration(key string, fallback time.Duration) time.Duration {
-	if v := os.Getenv(key); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			return d
-		}
+func envDuration(key string, fallback time.Duration) (time.Duration, error) {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return fallback, nil
 	}
-	return fallback
+
+	value, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be a duration: %q", key, raw)
+	}
+	if value <= 0 {
+		return 0, fmt.Errorf("%s must be a positive duration", key)
+	}
+	return value, nil
 }
 
 // parseReposEnv parses "owner:repo:platform,owner:repo:platform" into repo configs.
@@ -132,14 +157,58 @@ func parseReposEnv(raw string) ([]GitHubRepoConfig, error) {
 }
 
 func Load() (*Config, error) {
+	var configErrors []error
+	collect := func(err error) {
+		if err != nil {
+			configErrors = append(configErrors, err)
+		}
+	}
+
+	serverPort, err := envInt("COLINK_SERVER_PORT", 8080)
+	collect(err)
+	if err == nil && (serverPort < 1 || serverPort > 65535) {
+		collect(fmt.Errorf("COLINK_SERVER_PORT must be between 1 and 65535"))
+	}
+	databasePort, err := envInt("COLINK_DATABASE_PORT", 5432)
+	collect(err)
+	if err == nil && (databasePort < 1 || databasePort > 65535) {
+		collect(fmt.Errorf("COLINK_DATABASE_PORT must be between 1 and 65535"))
+	}
 	deviceLimit, err := envPositiveInt("COLINK_DEVICE_LIMIT", 20)
-	if err != nil {
-		return nil, err
+	collect(err)
+	databaseConnectTimeout, err := envDuration("COLINK_DATABASE_CONNECT_TIMEOUT", 2*time.Minute)
+	collect(err)
+	accessTTL, accessTTLErr := envDuration("COLINK_JWT_ACCESS_TTL", 72*time.Hour)
+	collect(accessTTLErr)
+	refreshTTL, refreshTTLErr := envDuration("COLINK_JWT_REFRESH_TTL", 30*24*time.Hour)
+	collect(refreshTTLErr)
+	if accessTTLErr == nil && refreshTTLErr == nil && accessTTL > refreshTTL {
+		collect(fmt.Errorf("COLINK_JWT_ACCESS_TTL must not exceed COLINK_JWT_REFRESH_TTL"))
+	}
+	ticketTTL, err := envDuration("COLINK_WS_TICKET_TTL", 30*time.Second)
+	collect(err)
+	ticketRateLimit, err := envPositiveInt("COLINK_WS_TICKET_RATE_LIMIT", 20)
+	collect(err)
+	maxMessageBytes, err := envPositiveInt64("COLINK_WS_MAX_MESSAGE_BYTES", 8*1024*1024)
+	collect(err)
+	updateCheckInterval, err := envDuration("COLINK_UPDATE_CHECK_INTERVAL", 30*time.Minute)
+	collect(err)
+
+	var repos []GitHubRepoConfig
+	if raw := os.Getenv("COLINK_UPDATE_GITHUB_REPOS"); raw != "" {
+		repos, err = parseReposEnv(raw)
+		if err != nil {
+			collect(fmt.Errorf("parse COLINK_UPDATE_GITHUB_REPOS: %w", err))
+		}
+	}
+
+	if len(configErrors) > 0 {
+		return nil, errors.Join(configErrors...)
 	}
 
 	cfg := &Config{
 		Server: ServerConfig{
-			Port: envInt("COLINK_SERVER_PORT", 8080),
+			Port: serverPort,
 			Mode: env("COLINK_SERVER_MODE", "debug"),
 		},
 		Device: DeviceConfig{
@@ -147,26 +216,29 @@ func Load() (*Config, error) {
 		},
 		Database: DatabaseConfig{
 			Host:           env("COLINK_DATABASE_HOST", "localhost"),
-			Port:           envInt("COLINK_DATABASE_PORT", 5432),
+			Port:           databasePort,
 			User:           env("COLINK_DATABASE_USER", "colink"),
 			Password:       env("COLINK_DATABASE_PASSWORD", ""),
 			DBName:         env("COLINK_DATABASE_DBNAME", "colink"),
 			SSLMode:        env("COLINK_DATABASE_SSLMODE", "disable"),
-			ConnectTimeout: envDuration("COLINK_DATABASE_CONNECT_TIMEOUT", 2*time.Minute),
+			ConnectTimeout: databaseConnectTimeout,
 		},
 		JWT: JWTConfig{
 			Secret:     env("COLINK_JWT_SECRET", ""),
-			AccessTTL:  envDuration("COLINK_JWT_ACCESS_TTL", 72*time.Hour),
-			RefreshTTL: envDuration("COLINK_JWT_REFRESH_TTL", 30*24*time.Hour),
+			AccessTTL:  accessTTL,
+			RefreshTTL: refreshTTL,
 		},
 		WS: WSConfig{
-			TicketTTL: envDuration("COLINK_WS_TICKET_TTL", 30*time.Second),
+			TicketTTL:       ticketTTL,
+			TicketRateLimit: ticketRateLimit,
+			MaxMessageBytes: maxMessageBytes,
 		},
 		Update: UpdateConfig{
-			CheckInterval: envDuration("COLINK_UPDATE_CHECK_INTERVAL", 30*time.Minute),
+			CheckInterval: updateCheckInterval,
 			StoragePath:   env("COLINK_UPDATE_STORAGE_PATH", "./data/updates"),
 			GitHub: GitHubConfig{
 				Token: env("COLINK_UPDATE_GITHUB_TOKEN", ""),
+				Repos: repos,
 			},
 			Proxy: ProxyConfig{
 				HTTP:    env("COLINK_HTTP_PROXY", ""),
@@ -174,14 +246,6 @@ func Load() (*Config, error) {
 				NoProxy: env("COLINK_NO_PROXY", ""),
 			},
 		},
-	}
-
-	if raw := os.Getenv("COLINK_UPDATE_GITHUB_REPOS"); raw != "" {
-		repos, err := parseReposEnv(raw)
-		if err != nil {
-			return nil, fmt.Errorf("parse COLINK_UPDATE_GITHUB_REPOS: %w", err)
-		}
-		cfg.Update.GitHub.Repos = repos
 	}
 
 	return cfg, nil

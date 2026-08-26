@@ -5,18 +5,25 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
+	"colink-server/internal/model"
 	"colink-server/internal/pkg"
 )
 
 const ContextUserIDKey = "userId"
 
-type AuthMiddleware struct {
-	secret string
+type userRepository interface {
+	FindByID(userID uuid.UUID) (*model.User, error)
 }
 
-func NewAuthMiddleware(secret string) *AuthMiddleware {
-	return &AuthMiddleware{secret: secret}
+type AuthMiddleware struct {
+	secret   string
+	userRepo userRepository
+}
+
+func NewAuthMiddleware(secret string, userRepo userRepository) *AuthMiddleware {
+	return &AuthMiddleware{secret: secret, userRepo: userRepo}
 }
 
 func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
@@ -45,6 +52,18 @@ func (m *AuthMiddleware) requireAuth(failure gin.HandlerFunc) gin.HandlerFunc {
 		token := strings.TrimSpace(strings.TrimPrefix(header, "Bearer "))
 		claims, err := pkg.ParseAccessToken(m.secret, token)
 		if err != nil || claims.UserID == "" {
+			failure(c)
+			c.Abort()
+			return
+		}
+		userID, err := uuid.Parse(claims.UserID)
+		if err != nil {
+			failure(c)
+			c.Abort()
+			return
+		}
+		user, err := m.userRepo.FindByID(userID)
+		if err != nil || user.Disabled {
 			failure(c)
 			c.Abort()
 			return

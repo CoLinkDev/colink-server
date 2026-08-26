@@ -46,8 +46,9 @@ type WsService struct {
 	ticketRepo      *repository.TicketRepository
 	hub             *ws.Hub
 	ticketTTL       time.Duration
+	ticketRateLimit int
 	ticketLimitMu   sync.Mutex
-	ticketLimitByID map[string][]time.Time
+	ticketLimitByDeviceID map[string][]time.Time
 	lastSeenMu      sync.Mutex
 	lastSeenByID    map[uuid.UUID]time.Time
 	pendingPushMu   sync.Mutex
@@ -62,6 +63,7 @@ func NewWsService(
 	ticketRepo *repository.TicketRepository,
 	hub *ws.Hub,
 	ticketTTL time.Duration,
+	ticketRateLimit int,
 	log *zap.Logger,
 ) *WsService {
 	return &WsService{
@@ -69,7 +71,8 @@ func NewWsService(
 		ticketRepo:      ticketRepo,
 		hub:             hub,
 		ticketTTL:       ticketTTL,
-		ticketLimitByID: make(map[string][]time.Time),
+		ticketRateLimit: ticketRateLimit,
+		ticketLimitByDeviceID: make(map[string][]time.Time),
 		lastSeenByID:    make(map[uuid.UUID]time.Time),
 		pendingPushes:   make(map[string]pendingPush),
 		connectedAt:     make(map[*ws.Client]time.Time),
@@ -84,8 +87,12 @@ func (s *WsService) IssueTicket(userID string, deviceID string) (*TicketResult, 
 	}
 
 	now := time.Now().UTC()
-	if !s.allowTicketIssue(userID, now) {
-		s.logger().Warn("websocket ticket rate limited", zap.String("user_id", shortID(userID)))
+	if !s.allowTicketIssue(device.ID.String(), now) {
+		s.logger().Warn(
+			"websocket ticket rate limited",
+			zap.String("user_id", shortID(userID)),
+			zap.String("device_id", shortID(deviceID)),
+		)
 		return nil, pkg.NewAppError(http.StatusTooManyRequests, pkg.CodeRateLimited, "rate limited")
 	}
 
@@ -319,12 +326,12 @@ func (s *WsService) refreshLastSeen(deviceID uuid.UUID, at time.Time, force bool
 	}
 }
 
-func (s *WsService) allowTicketIssue(userID string, now time.Time) bool {
+func (s *WsService) allowTicketIssue(deviceID string, now time.Time) bool {
 	s.ticketLimitMu.Lock()
 	defer s.ticketLimitMu.Unlock()
 
 	windowStart := now.Add(-time.Minute)
-	history := s.ticketLimitByID[userID]
+	history := s.ticketLimitByDeviceID[deviceID]
 	filtered := make([]time.Time, 0, len(history))
 	for _, item := range history {
 		if item.After(windowStart) {
@@ -332,15 +339,15 @@ func (s *WsService) allowTicketIssue(userID string, now time.Time) bool {
 		}
 	}
 	if len(filtered) == 0 {
-		delete(s.ticketLimitByID, userID)
+		delete(s.ticketLimitByDeviceID, deviceID)
 	}
-	if len(filtered) >= 5 {
-		s.ticketLimitByID[userID] = filtered
+	if len(filtered) >= s.ticketRateLimit {
+		s.ticketLimitByDeviceID[deviceID] = filtered
 		return false
 	}
 
 	filtered = append(filtered, now)
-	s.ticketLimitByID[userID] = filtered
+	s.ticketLimitByDeviceID[deviceID] = filtered
 	return true
 }
 

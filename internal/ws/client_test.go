@@ -13,7 +13,7 @@ import (
 
 func TestReadPumpDisconnectsAfterPongTimeout(t *testing.T) {
 	disconnected := make(chan struct{})
-	connection, client, start := newReadPumpTestClient(t, func(*Client) {
+	connection, client, start := newReadPumpTestClient(t, 8*1024*1024, func(*Client) {
 		close(disconnected)
 	})
 	defer connection.Close()
@@ -30,7 +30,7 @@ func TestReadPumpDisconnectsAfterPongTimeout(t *testing.T) {
 
 func TestReadPumpExtendsDeadlineWhenPongReceived(t *testing.T) {
 	disconnected := make(chan struct{})
-	connection, client, start := newReadPumpTestClient(t, func(*Client) {
+	connection, client, start := newReadPumpTestClient(t, 8*1024*1024, func(*Client) {
 		close(disconnected)
 	})
 	defer connection.Close()
@@ -56,7 +56,25 @@ func TestReadPumpExtendsDeadlineWhenPongReceived(t *testing.T) {
 	}
 }
 
-func newReadPumpTestClient(t *testing.T, onDisconnect func(*Client)) (*websocket.Conn, *Client, func()) {
+func TestReadPumpAppliesConfiguredMessageLimit(t *testing.T) {
+	disconnected := make(chan struct{})
+	connection, _, start := newReadPumpTestClient(t, 128, func(*Client) {
+		close(disconnected)
+	})
+	defer connection.Close()
+	start()
+
+	if err := connection.WriteJSON(map[string]string{"payload": strings.Repeat("x", 256)}); err != nil {
+		t.Fatalf("write oversized message: %v", err)
+	}
+	select {
+	case <-disconnected:
+	case <-time.After(time.Second):
+		t.Fatal("expected oversized message to disconnect the client")
+	}
+}
+
+func newReadPumpTestClient(t *testing.T, maxMessageBytes int64, onDisconnect func(*Client)) (*websocket.Conn, *Client, func()) {
 	t.Helper()
 
 	clientReady := make(chan *Client, 1)
@@ -77,6 +95,7 @@ func newReadPumpTestClient(t *testing.T, onDisconnect func(*Client)) (*websocket
 			"1.0.0",
 			"1.0.0",
 			nil,
+			maxMessageBytes,
 			nil,
 			onDisconnect,
 		)

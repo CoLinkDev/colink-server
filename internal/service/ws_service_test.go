@@ -17,17 +17,39 @@ import (
 
 func TestAllowTicketIssueRemovesExpiredHistory(t *testing.T) {
 	service := &WsService{
-		ticketLimitByID: map[string][]time.Time{
-			"user-1": {time.Now().UTC().Add(-2 * time.Minute)},
+		ticketRateLimit: 20,
+		ticketLimitByDeviceID: map[string][]time.Time{
+			"device-1": {time.Now().UTC().Add(-2 * time.Minute)},
 		},
 	}
 
-	if !service.allowTicketIssue("user-1", time.Now().UTC()) {
+	if !service.allowTicketIssue("device-1", time.Now().UTC()) {
 		t.Fatal("expected ticket issue to be allowed")
 	}
 
-	if got := len(service.ticketLimitByID["user-1"]); got != 1 {
+	if got := len(service.ticketLimitByDeviceID["device-1"]); got != 1 {
 		t.Fatalf("expected one active timestamp after cleanup, got %d", got)
+	}
+}
+
+func TestAllowTicketIssueUsesConfiguredPerDeviceLimit(t *testing.T) {
+	service := &WsService{
+		ticketRateLimit: 2,
+		ticketLimitByDeviceID: make(map[string][]time.Time),
+	}
+	now := time.Now().UTC()
+
+	if !service.allowTicketIssue("device-1", now) {
+		t.Fatal("expected first ticket for device-1 to be allowed")
+	}
+	if !service.allowTicketIssue("device-1", now) {
+		t.Fatal("expected second ticket for device-1 to be allowed")
+	}
+	if service.allowTicketIssue("device-1", now) {
+		t.Fatal("expected third ticket for device-1 to be rate limited")
+	}
+	if !service.allowTicketIssue("device-2", now) {
+		t.Fatal("expected another device to have an independent limit")
 	}
 }
 
@@ -215,7 +237,7 @@ func newTestWsClient(t *testing.T, hub *ws.Hub, userID string, deviceID string) 
 			return
 		}
 
-		client, err := ws.NewClient(conn, userID, deviceID, "test-device", "test", "1.0.0", "1.0.0", nil, nil, nil)
+		client, err := ws.NewClient(conn, userID, deviceID, "test-device", "test", "1.0.0", "1.0.0", nil, 8*1024*1024, nil, nil)
 		if err != nil {
 			t.Errorf("new websocket client: %v", err)
 			_ = conn.Close()

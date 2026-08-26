@@ -151,14 +151,28 @@ func (s *AuthService) Refresh(refreshToken string) (*RefreshResult, error) {
 	tokenHash := pkg.HashToken(refreshToken)
 
 	var result RefreshResult
+	var accountDisabled bool
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		tokenRepo := s.tokenRepo.WithTx(tx)
+		userRepo := s.userRepo.WithTx(tx)
 		tokenRecord, err := tokenRepo.FindByTokenHashForUpdate(tokenHash)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return pkg.NewAppError(http.StatusUnauthorized, pkg.CodeInvalidRefreshToken, "invalid refresh token")
 			}
 			return pkg.InternalError(err)
+		}
+
+		user, err := userRepo.FindByID(tokenRecord.UserID)
+		if err != nil {
+			return pkg.InternalError(err)
+		}
+		if user.Disabled {
+			if err := tokenRepo.RevokeAllByUserID(tokenRecord.UserID); err != nil {
+				return pkg.InternalError(err)
+			}
+			accountDisabled = true
+			return nil
 		}
 
 		now := time.Now().UTC()
@@ -168,6 +182,7 @@ func (s *AuthService) Refresh(refreshToken string) (*RefreshResult, error) {
 		if !tokenRecord.ExpiresAt.After(now) {
 			return pkg.NewAppError(http.StatusUnauthorized, pkg.CodeInvalidRefreshToken, "invalid refresh token")
 		}
+
 		if tokenRecord.RotatedAt != nil {
 			if tokenRecord.ReuseExpiresAt != nil &&
 				tokenRecord.ReuseExpiresAt.After(now) &&
@@ -216,6 +231,9 @@ func (s *AuthService) Refresh(refreshToken string) (*RefreshResult, error) {
 	})
 	if err != nil {
 		return nil, err
+	}
+	if accountDisabled {
+		return nil, pkg.NewAppError(http.StatusForbidden, pkg.CodeAccountDisabled, "account disabled")
 	}
 
 	return &result, nil

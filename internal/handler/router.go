@@ -28,14 +28,14 @@ func NewMainRouter(cfg *config.Config, db *gorm.DB, log *zap.Logger) *gin.Engine
 		cfg.JWT.RefreshTTL,
 	)
 	deviceService := service.NewDeviceService(deviceRepo, hub, cfg.Device.Limit)
-	wsService := service.NewWsService(deviceRepo, ticketRepo, hub, cfg.WS.TicketTTL, log)
+	wsService := service.NewWsService(deviceRepo, ticketRepo, hub, cfg.WS.TicketTTL, cfg.WS.TicketRateLimit, log)
 
 	authHandler := NewAuthHandler(authService)
 	deviceHandler := NewDeviceHandler(deviceService)
 	meHandler := NewMeHandler(authService)
-	wsHandler := NewWsHandler(wsService)
+	wsHandler := NewWsHandler(wsService, cfg.WS.MaxMessageBytes)
 	pushHandler := NewPushHandler(wsService)
-	authMiddleware := middleware.NewAuthMiddleware(cfg.JWT.Secret)
+	authMiddleware := middleware.NewAuthMiddleware(cfg.JWT.Secret, userRepo)
 
 	router := newBaseRouter(log)
 	registerMainRoutes(router, authHandler, deviceHandler, meHandler, wsHandler, pushHandler, authMiddleware)
@@ -72,16 +72,16 @@ func NewRouter(cfg *config.Config, db *gorm.DB, log *zap.Logger) (*gin.Engine, *
 		cfg.JWT.RefreshTTL,
 	)
 	deviceService := service.NewDeviceService(deviceRepo, hub, cfg.Device.Limit)
-	wsService := service.NewWsService(deviceRepo, ticketRepo, hub, cfg.WS.TicketTTL, log)
+	wsService := service.NewWsService(deviceRepo, ticketRepo, hub, cfg.WS.TicketTTL, cfg.WS.TicketRateLimit, log)
 	updateService := service.NewUpdateService(releaseRepo, cfg.Update, log)
 
 	authHandler := NewAuthHandler(authService)
 	deviceHandler := NewDeviceHandler(deviceService)
 	meHandler := NewMeHandler(authService)
-	wsHandler := NewWsHandler(wsService)
+	wsHandler := NewWsHandler(wsService, cfg.WS.MaxMessageBytes)
 	pushHandler := NewPushHandler(wsService)
 	updateHandler := NewUpdateHandler(updateService)
-	authMiddleware := middleware.NewAuthMiddleware(cfg.JWT.Secret)
+	authMiddleware := middleware.NewAuthMiddleware(cfg.JWT.Secret, userRepo)
 
 	registerMainRoutes(router, authHandler, deviceHandler, meHandler, wsHandler, pushHandler, authMiddleware)
 	registerUpdateRoutes(router, updateHandler)

@@ -7,6 +7,8 @@ import (
 	"net/mail"
 	"regexp"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -80,8 +82,13 @@ func validateDeviceType(deviceType string) error {
 }
 
 func validateDeviceName(name string) error {
-	if strings.TrimSpace(name) == "" {
+	if strings.TrimSpace(name) == "" || !utf8.ValidString(name) || utf8.RuneCountInString(name) > 100 {
 		return pkg.NewAppError(http.StatusBadRequest, pkg.CodeInvalidParameter, "invalid parameter")
+	}
+	for _, value := range name {
+		if unicode.IsControl(value) {
+			return pkg.NewAppError(http.StatusBadRequest, pkg.CodeInvalidParameter, "invalid parameter")
+		}
 	}
 
 	return nil
