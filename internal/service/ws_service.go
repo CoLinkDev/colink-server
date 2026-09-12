@@ -238,10 +238,10 @@ func (s *WsService) DeliverPush(userID string, deviceID string, payload ws.PushN
 
 	client := s.hub.ClientForDevice(userID, deviceID)
 	if client == nil {
-		return pkg.NewAppError(http.StatusOK, pkg.CodePushDeviceOffline, "device offline")
+		return pkg.NewAppError(http.StatusInternalServerError, pkg.CodePushDeviceOffline, "device offline")
 	}
 	if !client.SupportsPushNotifications() {
-		return pkg.NewAppError(http.StatusOK, pkg.CodePushNotSupported, "push not supported")
+		return pkg.NewAppError(http.StatusInternalServerError, pkg.CodePushNotSupported, "push not supported")
 	}
 
 	pushID := uuid.NewString()
@@ -264,7 +264,7 @@ func (s *WsService) DeliverPush(userID string, deviceID string, payload ws.PushN
 	}) {
 		s.removePendingPush(pushID, pending)
 		s.logger().Warn("push delivery failed", zap.String("device_id", shortID(deviceID)), zap.String("reason", "send_queue_closed"))
-		return pkg.NewAppError(http.StatusOK, pkg.CodePushDeviceOffline, "device offline")
+		return pkg.NewAppError(http.StatusInternalServerError, pkg.CodePushDeviceOffline, "device offline")
 	}
 
 	timer := time.NewTimer(pushAcknowledgementTimeout)
@@ -276,7 +276,7 @@ func (s *WsService) DeliverPush(userID string, deviceID string, payload ws.PushN
 	case <-timer.C:
 		s.removePendingPush(pushID, pending)
 		s.logger().Warn("push delivery timed out", zap.String("device_id", shortID(deviceID)))
-		return pkg.NewAppError(http.StatusOK, pkg.CodePushTimeout, "push timeout")
+		return pkg.NewAppError(http.StatusInternalServerError, pkg.CodePushTimeout, "push timeout")
 	}
 }
 

@@ -80,7 +80,7 @@ func (s *DeviceService) Register(userID string, deviceID string, name string, de
 	}
 
 	if existing != nil && existing.UserID != userUUID {
-		return nil, pkg.NewAppError(http.StatusConflict, pkg.CodeDeviceIDConflict, "device id conflict")
+		return nil, pkg.NewAppError(http.StatusBadRequest, pkg.CodeDeviceIDConflict, "device id conflict")
 	}
 
 	if existing != nil {
@@ -106,7 +106,7 @@ func (s *DeviceService) Register(userID string, deviceID string, name string, de
 		return nil, pkg.InternalError(err)
 	}
 	if count >= int64(s.deviceLimit) {
-		return nil, pkg.NewAppError(http.StatusConflict, pkg.CodeDeviceLimitReached, "device limit reached")
+		return nil, pkg.NewAppError(http.StatusBadRequest, pkg.CodeDeviceLimitReached, "device limit reached")
 	}
 	now := time.Now().UTC()
 

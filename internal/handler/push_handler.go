@@ -295,15 +295,17 @@ func invalidPushParameter() error {
 
 func writePushError(c *gin.Context, err error) {
 	code, message := pushErrorCodeAndMessage(err)
-	status := http.StatusInternalServerError
+	writePushResponse(c, pushHTTPStatus(code), code, message, nil)
+}
+
+func pushHTTPStatus(code int) int {
 	if code == pkg.CodeUnauthorized {
-		status = http.StatusUnauthorized
-	} else if code == pkg.CodeInvalidRequestBody || code == pkg.CodeInvalidParameter {
-		status = http.StatusBadRequest
-	} else if code == pkg.CodeDeviceNotFound || code == pkg.CodePushDeviceOffline || code == pkg.CodePushNotSupported || code == pkg.CodePushTimeout {
-		status = http.StatusOK
+		return http.StatusUnauthorized
 	}
-	writePushResponse(c, status, code, message, nil)
+	if code == pkg.CodeInvalidRequestBody || code == pkg.CodeInvalidParameter || code == pkg.CodeDeviceNotFound {
+		return http.StatusBadRequest
+	}
+	return http.StatusInternalServerError
 }
 
 func pushErrorCodeAndMessage(err error) (int, string) {

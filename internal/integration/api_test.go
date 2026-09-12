@@ -114,9 +114,14 @@ func TestAuthFlow(t *testing.T) {
 		"username": "taken-name",
 		"password": "password123",
 	}))
-	expectStatus(t, app.request(http.MethodPut, "/api/v1/me/username", bearer(login.Token), map[string]string{
+	expectErrorCode(t, app.request(http.MethodPost, "/api/v1/auth/register", "", map[string]string{
+		"email":    "taken@example.com",
+		"username": "unused-name",
+		"password": "password123",
+	}), http.StatusBadRequest, pkg.CodeEmailAlreadyExists)
+	expectErrorCode(t, app.request(http.MethodPut, "/api/v1/me/username", bearer(login.Token), map[string]string{
 		"username": "taken-name",
-	}), http.StatusConflict)
+	}), http.StatusBadRequest, pkg.CodeUsernameAlreadyExists)
 
 	refreshed := decodeOK[refreshResult](t, app.request(http.MethodPost, "/api/v1/auth/refresh", "", map[string]string{
 		"refreshToken": login.RefreshToken,
@@ -174,9 +179,13 @@ func TestDisabledAccountCannotAuthenticateOrRefresh(t *testing.T) {
 	}
 
 	expectStatus(t, app.request(http.MethodGet, "/api/v1/me", bearer(auth.Token), nil), http.StatusUnauthorized)
+	expectErrorCode(t, app.request(http.MethodPost, "/api/v1/auth/login", "", map[string]string{
+		"identifier": "disabled-user",
+		"password":   "password123",
+	}), http.StatusUnauthorized, pkg.CodeAccountDisabled)
 	expectErrorCode(t, app.request(http.MethodPost, "/api/v1/auth/refresh", "", map[string]string{
 		"refreshToken": auth.RefreshToken,
-	}), http.StatusForbidden, pkg.CodeAccountDisabled)
+	}), http.StatusUnauthorized, pkg.CodeAccountDisabled)
 
 	if err := app.db.Table("users").Where("id = ?", auth.UserID).Update("disabled", false).Error; err != nil {
 		t.Fatalf("enable account: %v", err)
@@ -187,7 +196,7 @@ func TestDisabledAccountCannotAuthenticateOrRefresh(t *testing.T) {
 }
 
 func TestDeviceFlow(t *testing.T) {
-	app := newTestApp(t, 5*time.Second)
+	app := newTestAppWithDeviceLimit(t, 5*time.Second, 1)
 	defer app.close()
 
 	owner := decodeOK[authResult](t, app.request(http.MethodPost, "/api/v1/auth/register", "", map[string]string{
@@ -281,13 +290,19 @@ func TestDeviceFlow(t *testing.T) {
 	if len(devices.Devices) != 1 || devices.Devices[0].Name != "Duplicate" || devices.Devices[0].PublicKey != "SUpLTA==" {
 		t.Fatal("device upsert did not update existing device")
 	}
+	expectErrorCode(t, app.request(http.MethodPost, "/api/v1/devices", bearer(owner.Token), map[string]string{
+		"deviceId":  "44444444-4444-4444-8444-444444444444",
+		"name":      "Over limit",
+		"type":      "windows",
+		"publicKey": "QUJDRA==",
+	}), http.StatusBadRequest, pkg.CodeDeviceLimitReached)
 
-	expectStatus(t, app.request(http.MethodPost, "/api/v1/devices", bearer(other.Token), map[string]string{
+	expectErrorCode(t, app.request(http.MethodPost, "/api/v1/devices", bearer(other.Token), map[string]string{
 		"deviceId":  "22222222-2222-4222-8222-222222222222",
 		"name":      "Stolen",
 		"type":      "windows",
 		"publicKey": "QUJDRA==",
-	}), http.StatusConflict)
+	}), http.StatusBadRequest, pkg.CodeDeviceIDConflict)
 }
 
 func TestWsTicketFlow(t *testing.T) {
@@ -328,6 +343,10 @@ func TestWsTicketFlow(t *testing.T) {
 }
 
 func newTestApp(t *testing.T, ticketTTL time.Duration) *testApp {
+	return newTestAppWithDeviceLimit(t, ticketTTL, 20)
+}
+
+func newTestAppWithDeviceLimit(t *testing.T, ticketTTL time.Duration, deviceLimit int) *testApp {
 	t.Helper()
 
 	dsn := os.Getenv("COLINK_TEST_DATABASE_DSN")
@@ -356,7 +375,7 @@ func newTestApp(t *testing.T, ticketTTL time.Duration) *testApp {
 
 	cfg := &config.Config{
 		Server: config.ServerConfig{Mode: gin.TestMode},
-		Device: config.DeviceConfig{Limit: 20},
+		Device: config.DeviceConfig{Limit: deviceLimit},
 		Database: config.DatabaseConfig{
 			DBName: dbName,
 		},

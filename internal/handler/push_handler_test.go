@@ -10,9 +10,35 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"colink-server/internal/middleware"
+	"colink-server/internal/pkg"
 	"colink-server/internal/service"
 	"colink-server/internal/ws"
 )
+
+func TestPushHTTPStatusMatchesBarkBehavior(t *testing.T) {
+	tests := []struct {
+		name string
+		code int
+		want int
+	}{
+		{name: "unauthorized CoLink extension", code: pkg.CodeUnauthorized, want: http.StatusUnauthorized},
+		{name: "invalid request body", code: pkg.CodeInvalidRequestBody, want: http.StatusBadRequest},
+		{name: "invalid parameter", code: pkg.CodeInvalidParameter, want: http.StatusBadRequest},
+		{name: "target device not found", code: pkg.CodeDeviceNotFound, want: http.StatusBadRequest},
+		{name: "device offline", code: pkg.CodePushDeviceOffline, want: http.StatusInternalServerError},
+		{name: "push not supported", code: pkg.CodePushNotSupported, want: http.StatusInternalServerError},
+		{name: "push timeout", code: pkg.CodePushTimeout, want: http.StatusInternalServerError},
+		{name: "internal error", code: pkg.CodeInternalError, want: http.StatusInternalServerError},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := pushHTTPStatus(test.code); got != test.want {
+				t.Fatalf("expected status %d, got %d", test.want, got)
+			}
+		})
+	}
+}
 
 func TestParsePushRequestAcceptsJSONBatch(t *testing.T) {
 	gin.SetMode(gin.TestMode)

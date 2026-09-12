@@ -127,7 +127,7 @@ func (s *AuthService) Login(identifier string, password string) (*AuthResult, er
 		return nil, err
 	}
 	if user.Disabled {
-		return nil, pkg.NewAppError(http.StatusForbidden, pkg.CodeAccountDisabled, "account disabled")
+		return nil, pkg.NewAppError(http.StatusUnauthorized, pkg.CodeAccountDisabled, "account disabled")
 	}
 	if err := pkg.ComparePassword(user.PasswordHash, password); err != nil {
 		return nil, pkg.NewAppError(http.StatusUnauthorized, pkg.CodeInvalidCredentials, "invalid credentials")
@@ -233,7 +233,7 @@ func (s *AuthService) Refresh(refreshToken string) (*RefreshResult, error) {
 		return nil, err
 	}
 	if accountDisabled {
-		return nil, pkg.NewAppError(http.StatusForbidden, pkg.CodeAccountDisabled, "account disabled")
+		return nil, pkg.NewAppError(http.StatusUnauthorized, pkg.CodeAccountDisabled, "account disabled")
 	}
 
 	return &result, nil
@@ -437,9 +437,9 @@ func mapUserUniqueViolation(err error) *pkg.AppError {
 
 	switch pgErr.ConstraintName {
 	case "idx_users_email":
-		return pkg.NewAppError(http.StatusConflict, pkg.CodeEmailAlreadyExists, "email already exists")
+		return pkg.NewAppError(http.StatusBadRequest, pkg.CodeEmailAlreadyExists, "email already exists")
 	case "idx_users_username":
-		return pkg.NewAppError(http.StatusConflict, pkg.CodeUsernameAlreadyExists, "username already exists")
+		return pkg.NewAppError(http.StatusBadRequest, pkg.CodeUsernameAlreadyExists, "username already exists")
 	default:
 		return nil
 	}
