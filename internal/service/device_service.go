@@ -211,7 +211,7 @@ func (s *DeviceService) RotateKey(userID string, deviceID string, publicKey stri
 func parseDeviceUUID(value string) (uuid.UUID, error) {
 	id, err := uuid.Parse(value)
 	if err != nil || id.Version() != 4 {
-		return uuid.Nil, pkg.NewAppError(http.StatusBadRequest, pkg.CodeInvalidDeviceKey, "invalid device id")
+		return uuid.Nil, pkg.NewAppError(http.StatusBadRequest, pkg.CodeInvalidDeviceID, "invalid device id")
 	}
 
 	return id, nil

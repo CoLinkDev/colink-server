@@ -23,6 +23,7 @@ const (
 	CodeInvalidDeviceType  = 2002
 	CodeInvalidDeviceKey   = 2003
 	CodeDeviceIDConflict   = 2004
+	CodeInvalidDeviceID    = 2005
 	CodeDeviceNotFound     = 2010
 	CodePushDeviceOffline  = 2011
 	CodePushNotSupported   = 2012

@@ -251,12 +251,18 @@ func TestDeviceFlow(t *testing.T) {
 		t.Fatal("expected device list to be empty after delete")
 	}
 
-	expectStatus(t, app.request(http.MethodPost, "/api/v1/devices", bearer(owner.Token), map[string]string{
+	expectErrorCode(t, app.request(http.MethodPost, "/api/v1/devices", bearer(owner.Token), map[string]string{
 		"deviceId":  "not-a-uuid",
 		"name":      "Invalid",
 		"type":      "windows",
 		"publicKey": "QUJDRA==",
-	}), http.StatusBadRequest)
+	}), http.StatusBadRequest, pkg.CodeInvalidDeviceID)
+	expectErrorCode(t, app.request(http.MethodPost, "/api/v1/devices", bearer(owner.Token), map[string]string{
+		"deviceId":  "33333333-3333-4333-8333-333333333333",
+		"name":      "Invalid key",
+		"type":      "windows",
+		"publicKey": "not-base64!",
+	}), http.StatusBadRequest, pkg.CodeInvalidDeviceKey)
 
 	expectStatus(t, app.request(http.MethodPost, "/api/v1/devices", bearer(owner.Token), map[string]string{
 		"deviceId":  "22222222-2222-4222-8222-222222222222",
