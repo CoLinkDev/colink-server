@@ -2,12 +2,15 @@ package service
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"colink-server/internal/model"
+	"colink-server/internal/pkg"
 )
 
 func TestNormalizeVersion(t *testing.T) {
@@ -139,6 +142,19 @@ func TestSelectTauriAssets(t *testing.T) {
 				t.Fatalf("signature present = %t, want %t", signature != nil, test.wantSignature)
 			}
 		})
+	}
+}
+
+func TestGetTauriManifestRejectsInvalidCurrentVersionBeforeLookup(t *testing.T) {
+	service := &UpdateService{}
+
+	_, err := service.GetTauriManifest("windows", "x86_64", "invalid")
+	var appErr *pkg.AppError
+	if !errors.As(err, &appErr) {
+		t.Fatalf("GetTauriManifest() error = %v, want AppError", err)
+	}
+	if appErr.HTTPStatus != http.StatusBadRequest || appErr.Code != pkg.CodeInvalidParameter {
+		t.Fatalf("GetTauriManifest() error = (%d, %d), want (%d, %d)", appErr.HTTPStatus, appErr.Code, http.StatusBadRequest, pkg.CodeInvalidParameter)
 	}
 }
 

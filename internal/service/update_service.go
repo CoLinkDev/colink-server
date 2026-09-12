@@ -228,6 +228,9 @@ func (s *UpdateService) GetTauriManifest(target, arch, currentVersion string) (*
 	if !strings.EqualFold(strings.TrimSpace(target), "windows") || strings.TrimSpace(arch) != "x86_64" {
 		return nil, nil
 	}
+	if _, err := parseSemver(currentVersion); err != nil {
+		return nil, pkg.NewAppError(http.StatusBadRequest, pkg.CodeInvalidParameter, "invalid parameter")
+	}
 
 	release, err := s.releaseRepo.FindLatestByPlatform("windows")
 	if err != nil {
@@ -237,9 +240,6 @@ func (s *UpdateService) GetTauriManifest(target, arch, currentVersion string) (*
 		return nil, pkg.InternalError(err)
 	}
 
-	if _, err := parseSemver(currentVersion); err != nil {
-		return nil, pkg.NewAppError(http.StatusBadRequest, pkg.CodeInvalidParameter, "invalid parameter")
-	}
 	hasUpdate, err := isNewerVersion(release.Version, currentVersion)
 	if err != nil {
 		return nil, pkg.InternalError(err)
