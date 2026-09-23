@@ -16,6 +16,7 @@ type Config struct {
 	JWT      JWTConfig
 	WS       WSConfig
 	Update   UpdateConfig
+	Notes    NotesConfig
 }
 
 type ServerConfig struct {
@@ -54,6 +55,15 @@ type UpdateConfig struct {
 	StoragePath   string
 	GitHub        GitHubConfig
 	Proxy         ProxyConfig
+}
+
+type NotesConfig struct {
+	LimitBytes          int64
+	MaxAttachmentBytes  int64
+	MaxMarkdownBytes    int64
+	AttachmentRetention time.Duration
+	ChangeLogRetention  time.Duration
+	StoragePath         string
 }
 
 type ProxyConfig struct {
@@ -193,6 +203,25 @@ func Load() (*Config, error) {
 	collect(err)
 	updateCheckInterval, err := envDuration("COLINK_UPDATE_CHECK_INTERVAL", 30*time.Minute)
 	collect(err)
+	notesLimitBytes, err := envPositiveInt64("COLINK_NOTES_LIMIT_BYTES", 1024*1024*1024)
+	collect(err)
+	notesMaxAttachmentBytes, err := envPositiveInt64("COLINK_NOTES_MAX_ATTACHMENT_BYTES", 100*1024*1024)
+	collect(err)
+	if err == nil && notesMaxAttachmentBytes > notesLimitBytes {
+		collect(fmt.Errorf("COLINK_NOTES_MAX_ATTACHMENT_BYTES must not exceed COLINK_NOTES_LIMIT_BYTES"))
+	}
+	notesMaxMarkdownBytes, err := envPositiveInt64("COLINK_NOTES_MAX_MARKDOWN_BYTES", 2*1024*1024)
+	collect(err)
+	if err == nil && notesMaxMarkdownBytes > notesLimitBytes {
+		collect(fmt.Errorf("COLINK_NOTES_MAX_MARKDOWN_BYTES must not exceed COLINK_NOTES_LIMIT_BYTES"))
+	}
+	notesAttachmentRetention, err := envDuration("COLINK_NOTES_ATTACHMENT_RETENTION", 7*24*time.Hour)
+	collect(err)
+	if err == nil && notesAttachmentRetention < 7*24*time.Hour {
+		collect(fmt.Errorf("COLINK_NOTES_ATTACHMENT_RETENTION must be at least 168h"))
+	}
+	notesChangeLogRetention, err := envDuration("COLINK_NOTES_CHANGELOG_RETENTION", 30*24*time.Hour)
+	collect(err)
 
 	var repos []GitHubRepoConfig
 	if raw := os.Getenv("COLINK_UPDATE_GITHUB_REPOS"); raw != "" {
@@ -245,6 +274,14 @@ func Load() (*Config, error) {
 				HTTPS:   env("COLINK_HTTPS_PROXY", ""),
 				NoProxy: env("COLINK_NO_PROXY", ""),
 			},
+		},
+		Notes: NotesConfig{
+			LimitBytes:          notesLimitBytes,
+			MaxAttachmentBytes:  notesMaxAttachmentBytes,
+			MaxMarkdownBytes:    notesMaxMarkdownBytes,
+			AttachmentRetention: notesAttachmentRetention,
+			ChangeLogRetention:  notesChangeLogRetention,
+			StoragePath:         env("COLINK_NOTES_STORAGE_PATH", "./data/notes"),
 		},
 	}
 

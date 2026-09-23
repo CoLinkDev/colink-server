@@ -58,8 +58,12 @@ func main() {
 	defer stopBackground()
 
 	go janitor.New(
+		db,
 		repository.NewTokenRepository(db),
 		repository.NewTicketRepository(db),
+		repository.NewNoteAttachmentRepository(db),
+		repository.NewNoteChangeLogRepository(db),
+		cfg.Notes,
 		time.Hour,
 		log,
 	).Run(bgCtx)
@@ -68,6 +72,7 @@ func main() {
 		Addr:              fmt.Sprintf(":%d", cfg.Server.Port),
 		Handler:           router,
 		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       2 * time.Minute,
 	}
 
 	go func() {

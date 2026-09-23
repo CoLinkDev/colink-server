@@ -98,6 +98,10 @@ func TestPushRoutesRegisterWithoutPathConflicts(t *testing.T) {
 		NewMeHandler(nil),
 		NewWsHandler(wsService, 8*1024*1024),
 		NewPushHandler(wsService),
+		NewNoteHandler(nil),
+		NewNoteTagHandler(nil),
+		NewNoteAttachmentHandler(nil),
+		NewSyncHandler(nil),
 		middleware.NewAuthMiddleware("test-secret", nil),
 	)
 }

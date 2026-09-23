@@ -93,6 +93,7 @@ func TestLoadRejectsInvalidTypedConfiguration(t *testing.T) {
 		{key: "COLINK_WS_MAX_MESSAGE_BYTES", value: "-1"},
 		{key: "COLINK_WS_MAX_MESSAGE_BYTES", value: "huge"},
 		{key: "COLINK_UPDATE_CHECK_INTERVAL", value: "0s"},
+		{key: "COLINK_NOTES_ATTACHMENT_RETENTION", value: "167h59m59s"},
 	}
 
 	for _, tt := range tests {

@@ -32,6 +32,18 @@ const (
 	CodeUpdatePlatformNotSupported = 5001
 	CodeUpdateReleaseNotFound      = 5002
 	CodeUpdateAssetNotFound        = 5003
+
+	CodeNoteNotFound             = 6001
+	CodeRevisionConflict         = 6002
+	CodeTagNotFound              = 6003
+	CodeTagNameConflict          = 6004
+	CodeAttachmentNotFound       = 6005
+	CodeAttachmentInUse          = 6006
+	CodeNoteStorageLimitReached  = 6007
+	CodeInvalidNoteReference     = 6008
+	CodeSyncCursorExpired        = 6009
+	CodeAttachmentChecksumMismatch = 6010
+	CodeAttachmentIDUnavailable  = 6011
 )
 
 type AppError struct {

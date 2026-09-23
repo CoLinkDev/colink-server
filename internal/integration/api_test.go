@@ -156,9 +156,11 @@ func TestAuthFlow(t *testing.T) {
 		"password":   "password456",
 	}), http.StatusOK)
 
+	// Changing the password revokes every refresh token, including the
+	// original registration session.
 	expectStatus(t, app.request(http.MethodPost, "/api/v1/auth/refresh", "", map[string]string{
 		"refreshToken": register.RefreshToken,
-	}), http.StatusOK)
+	}), http.StatusUnauthorized)
 
 	expectStatus(t, app.request(http.MethodPost, "/api/v1/auth/refresh", "", map[string]string{
 		"refreshToken": refreshed.RefreshToken,
@@ -325,7 +327,7 @@ func TestWsTicketFlow(t *testing.T) {
 		"deviceId": device.DeviceID,
 	}))
 
-	wsURL := "ws" + strings.TrimPrefix(app.server.URL, "http") + "/ws/v1?ticket=" + url.QueryEscape(ticket.Ticket)
+	wsURL := "ws" + strings.TrimPrefix(app.server.URL, "http") + "/ws/v1?ticket=" + url.QueryEscape(ticket.Ticket) + "&businessVersion=1.0.0"
 	conn, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		t.Fatalf("dial websocket: %v", err)
@@ -333,13 +335,13 @@ func TestWsTicketFlow(t *testing.T) {
 	_ = resp.Body.Close()
 	_ = conn.Close()
 
-	expectStatus(t, app.request(http.MethodGet, "/ws/v1?ticket="+url.QueryEscape(ticket.Ticket), "", nil), http.StatusUnauthorized)
+	expectStatus(t, app.request(http.MethodGet, "/ws/v1?ticket="+url.QueryEscape(ticket.Ticket)+"&businessVersion=1.0.0", "", nil), http.StatusUnauthorized)
 
 	expiring := decodeOK[ticketResult](t, app.request(http.MethodPost, "/api/v1/ws/ticket", bearer(auth.Token), map[string]string{
 		"deviceId": device.DeviceID,
 	}))
 	time.Sleep(100 * time.Millisecond)
-	expectStatus(t, app.request(http.MethodGet, "/ws/v1?ticket="+url.QueryEscape(expiring.Ticket), "", nil), http.StatusUnauthorized)
+	expectStatus(t, app.request(http.MethodGet, "/ws/v1?ticket="+url.QueryEscape(expiring.Ticket)+"&businessVersion=1.0.0", "", nil), http.StatusUnauthorized)
 }
 
 func newTestApp(t *testing.T, ticketTTL time.Duration) *testApp {
@@ -388,6 +390,14 @@ func newTestAppWithDeviceLimit(t *testing.T, ticketTTL time.Duration, deviceLimi
 			TicketTTL:       ticketTTL,
 			TicketRateLimit: 20,
 			MaxMessageBytes: 8 * 1024 * 1024,
+		},
+		Notes: config.NotesConfig{
+			LimitBytes:          1024 * 1024,
+			MaxAttachmentBytes:  100 * 1024,
+			MaxMarkdownBytes:    64 * 1024,
+			AttachmentRetention: 7 * 24 * time.Hour,
+			ChangeLogRetention:  30 * 24 * time.Hour,
+			StoragePath:         t.TempDir(),
 		},
 	}
 

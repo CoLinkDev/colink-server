@@ -59,8 +59,8 @@ See `.env.example`. CoLink binaries read `COLINK_*` variables directly, and Dock
 | Service | Responsibility |
 |---|---|
 | `nginx` | Public entrypoint and path routing |
-| `server` | Auth, account, device API, WebSocket tickets, WebSocket relay, frontend fallback |
+| `server` | Auth, account, device and notes APIs, attachment storage, WebSocket relay, frontend fallback |
 | `update` | GitHub release checks, cached update metadata, update asset downloads |
 | `postgres` | PostgreSQL storage |
 
-The server does not persist messages, files, or clipboard content — it only relays WebSocket frames between authenticated devices belonging to the same user.
+The server persists cloud notes and their attachments. WebSocket messages, transferred files, and clipboard content are relayed only between authenticated devices belonging to the same user.

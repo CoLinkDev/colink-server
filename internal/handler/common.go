@@ -11,11 +11,19 @@ import (
 
 func bindJSON(c *gin.Context, req any) bool {
 	if err := c.ShouldBindJSON(req); err != nil {
-		writeError(c, pkg.NewAppError(http.StatusBadRequest, pkg.CodeInvalidRequestBody, "invalid request body"))
+		writeError(c, newInvalidRequestBodyError())
 		return false
 	}
 
 	return true
+}
+
+func newInvalidRequestBodyError() *pkg.AppError {
+	return pkg.NewAppError(http.StatusBadRequest, pkg.CodeInvalidRequestBody, "invalid request body")
+}
+
+func newInvalidParameterError() *pkg.AppError {
+	return pkg.NewAppError(http.StatusBadRequest, pkg.CodeInvalidParameter, "invalid parameter")
 }
 
 func userIDFromContext(c *gin.Context) string {

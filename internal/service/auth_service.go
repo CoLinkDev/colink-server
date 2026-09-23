@@ -436,9 +436,9 @@ func mapUserUniqueViolation(err error) *pkg.AppError {
 	}
 
 	switch pgErr.ConstraintName {
-	case "idx_users_email":
+	case "idx_users_email", "users_email_key":
 		return pkg.NewAppError(http.StatusBadRequest, pkg.CodeEmailAlreadyExists, "email already exists")
-	case "idx_users_username":
+	case "idx_users_username", "users_username_key":
 		return pkg.NewAppError(http.StatusBadRequest, pkg.CodeUsernameAlreadyExists, "username already exists")
 	default:
 		return nil
