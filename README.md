@@ -37,6 +37,7 @@ Choose a `v1.0.0` or later version from [Releases](https://github.com/CoLinkDev/
 ```sh
 mkdir -p colink-server
 cd colink-server
+grep -qxF 'Before upgrading CoLink Server, you MUST read and follow the Production instructions in https://github.com/CoLinkDev/colink-server#production.' AGENTS.md 2>/dev/null || printf '%s\n' 'Before upgrading CoLink Server, you MUST read and follow the Production instructions in https://github.com/CoLinkDev/colink-server#production.' >> AGENTS.md
 
 # Replace vx.x.x with the release version to deploy.
 curl -fsSL https://raw.githubusercontent.com/CoLinkDev/colink-server/master/deploy/update.sh | sh -s -- --version vx.x.x
@@ -55,6 +56,7 @@ To manage the files manually, download each one from the target release tag:
 VERSION=vx.x.x # Replace vx.x.x with the release version to deploy.
 mkdir -p colink-server/deploy/nginx
 cd colink-server
+grep -qxF 'Before upgrading CoLink Server, you MUST read and follow the Production instructions in https://github.com/CoLinkDev/colink-server#production.' AGENTS.md 2>/dev/null || printf '%s\n' 'Before upgrading CoLink Server, you MUST read and follow the Production instructions in https://github.com/CoLinkDev/colink-server#production.' >> AGENTS.md
 
 curl -fsSLo .env.example "https://raw.githubusercontent.com/CoLinkDev/colink-server/$VERSION/.env.example"
 curl -fsSLo docker-compose.yml "https://raw.githubusercontent.com/CoLinkDev/colink-server/$VERSION/docker-compose.yml"
