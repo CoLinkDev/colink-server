@@ -1,5 +1,5 @@
 x-colink-image: &colink-image
-  image: ghcr.io/colinkdev/colink-server:latest
+  image: ghcr.io/colinkdev/colink-server:${COLINK_SERVER_IMAGE_TAG:?COLINK_SERVER_IMAGE_TAG is required}
 
 x-colink-db-env: &colink-db-env
   COLINK_DATABASE_HOST: postgres

@@ -28,27 +28,45 @@ Note: when the same variable exists in both the terminal environment and the `.e
 
 ## Production
 
-```sh
-# Get a Github token at https://github.com/settings/personal-access-tokens, remember to enable the read:packages permission for this token
-# `docker login ghcr.io` via this token
+Get a GitHub token from [Personal access tokens](https://github.com/settings/personal-access-tokens), enable the `read:packages` permission, and use it with `docker login ghcr.io`.
 
-mkdir -p colink-server/deploy/nginx
+### Automatic deployment and updates
+
+Choose a `v1.0.0` or later version from [Releases](https://github.com/CoLinkDev/colink-server/releases), and then run the online updater from the deployment directory.
+
+```sh
+mkdir -p colink-server
 cd colink-server
 
-curl -fsSLO https://raw.githubusercontent.com/CoLinkDev/colink-server/master/.env.example
-curl -fsSLO https://raw.githubusercontent.com/CoLinkDev/colink-server/master/docker-compose.yml
-curl -fsSLo deploy/nginx/default.conf https://raw.githubusercontent.com/CoLinkDev/colink-server/master/deploy/nginx/default.conf
-
-cp .env.example .env
-
-# Edit .env and fill in required variables
+# Replace vx.x.x with the release version to deploy.
+curl -fsSL https://raw.githubusercontent.com/CoLinkDev/colink-server/master/deploy/update.sh | sh -s -- --version vx.x.x
 
 docker compose pull
 docker compose up -d
 ```
 
-The Docker image builds the Vue console from `web/console` and embeds its `dist`
-output into the server binary.
+Run the same updater command with the target release tag for future updates. The updater sets `COLINK_SERVER_IMAGE_TAG` in `.env` to the matching release version. Add `--check` to report differences without changing files. Existing files are backed up under `.colink-deploy-backups/`; the managed image tag is updated while other `.env` values are preserved. On the first deployment, the updater creates `.env` with a secure random `COLINK_JWT_SECRET`; review the remaining optional settings as needed.
+
+### Manual deployment and updates
+
+To manage the files manually, download each one from the target release tag:
+
+```sh
+VERSION=vx.x.x # Replace vx.x.x with the release version to deploy.
+mkdir -p colink-server/deploy/nginx
+cd colink-server
+
+curl -fsSLo .env.example "https://raw.githubusercontent.com/CoLinkDev/colink-server/$VERSION/.env.example"
+curl -fsSLo docker-compose.yml "https://raw.githubusercontent.com/CoLinkDev/colink-server/$VERSION/docker-compose.yml"
+curl -fsSLo deploy/nginx/default.conf "https://raw.githubusercontent.com/CoLinkDev/colink-server/$VERSION/deploy/nginx/default.conf"
+
+# Only create .env on the first deployment. Set COLINK_SERVER_IMAGE_TAG to the release version without the leading "v", then review the remaining settings. Configure it before continuing.
+[ -f .env ] || cp .env.example .env
+vi .env
+
+docker compose pull
+docker compose up -d
+```
 
 ## Environment Variables
 
