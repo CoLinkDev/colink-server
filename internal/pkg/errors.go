@@ -44,6 +44,7 @@ const (
 	CodeSyncCursorExpired        = 6009
 	CodeAttachmentChecksumMismatch = 6010
 	CodeAttachmentIDUnavailable  = 6011
+	CodeNoteIDUnavailable        = 6012
 )
 
 type AppError struct {

@@ -197,6 +197,40 @@ func TestDisabledAccountCannotAuthenticateOrRefresh(t *testing.T) {
 	}), http.StatusUnauthorized)
 }
 
+func TestNoteIDUnavailableForActiveAndDeletedNotes(t *testing.T) {
+	app := newTestApp(t, 5*time.Second)
+	defer app.close()
+
+	auth := decodeOK[authResult](t, app.request(http.MethodPost, "/api/v1/auth/register", "", map[string]string{
+		"email":    "notes@example.com",
+		"username": "notes-user",
+		"password": "password123",
+	}))
+	noteID := "55555555-5555-4555-8555-555555555555"
+	request := map[string]any{
+		"noteId":        noteID,
+		"title":         "Local note",
+		"markdown":      "Body",
+		"tagIds":        []string{},
+		"attachmentIds": []string{},
+	}
+
+	expectStatus(t, app.request(http.MethodPost, "/api/v1/notes", bearer(auth.Token), request), http.StatusOK)
+	expectErrorCode(
+		t,
+		app.request(http.MethodPost, "/api/v1/notes", bearer(auth.Token), request),
+		http.StatusConflict,
+		pkg.CodeNoteIDUnavailable,
+	)
+	expectStatus(t, app.request(http.MethodDelete, "/api/v1/notes/"+noteID+"?baseRevision=1", bearer(auth.Token), nil), http.StatusOK)
+	expectErrorCode(
+		t,
+		app.request(http.MethodPost, "/api/v1/notes", bearer(auth.Token), request),
+		http.StatusConflict,
+		pkg.CodeNoteIDUnavailable,
+	)
+}
+
 func TestDeviceFlow(t *testing.T) {
 	app := newTestAppWithDeviceLimit(t, 5*time.Second, 1)
 	defer app.close()

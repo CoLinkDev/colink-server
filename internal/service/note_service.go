@@ -113,7 +113,10 @@ func (s *NoteService) CreateNote(userID string, noteID string, input NoteWriteIn
 		var existing model.Note
         lookupErr := tx.Where("user_id = ? AND id = ?", userUUID, noteUUID).First(&existing).Error
 		if lookupErr == nil {
-			return pkg.NewAppError(http.StatusBadRequest, pkg.CodeInvalidParameter, "invalid parameter")
+			// Note IDs remain reserved after deletion. A dedicated error lets
+			// clients distinguish a tombstone from malformed input and enter
+			// cloud-deletion conflict handling without retrying the old ID.
+			return pkg.NewAppError(http.StatusConflict, pkg.CodeNoteIDUnavailable, "note ID unavailable")
 		}
 		if !errors.Is(lookupErr, gorm.ErrRecordNotFound) {
 			return pkg.InternalError(lookupErr)
