@@ -178,7 +178,7 @@ docker compose \
 
 docker run --rm \
     -v "$TEMP_DIR/files/deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro" \
-    nginx:1.27-alpine nginx -t >/dev/null
+    nginx:1.30.6-alpine nginx -t >/dev/null
 
 updates_needed=0
 for relative_path in $MANAGED_FILES; do

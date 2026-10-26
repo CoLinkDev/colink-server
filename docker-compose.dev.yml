@@ -93,7 +93,7 @@ services:
       - colink
 
   nginx:
-    image: nginx:1.27-alpine
+    image: nginx:1.30.6-alpine
     restart: unless-stopped
     depends_on:
       - server
