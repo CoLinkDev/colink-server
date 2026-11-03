@@ -15,24 +15,24 @@ const (
 )
 
 type Client struct {
-	conn            *websocket.Conn
-	userID          string
-	deviceID        string
-	deviceUUID      uuid.UUID
-	deviceName      string
-	deviceType      string
-	businessVersion string
-	wsVersion       string
+	conn                *websocket.Conn
+	userID              string
+	deviceID            string
+	deviceUUID          uuid.UUID
+	deviceName          string
+	deviceType          string
+	businessVersion     string
+	wsVersion           string
 	advertisedWsVersion *string
-	maxMessageBytes int64
-	send            chan any
-	process         func(*Client, ClientMessage)
-	onDisconnect    func(*Client)
-	closeOnce       sync.Once
-	disconnectOnce  sync.Once
-	stateMu         sync.RWMutex
-	closed          bool
-	pongTimeout     time.Duration
+	maxMessageBytes     int64
+	send                chan any
+	process             func(*Client, ClientMessage)
+	onDisconnect        func(*Client)
+	closeOnce           sync.Once
+	disconnectOnce      sync.Once
+	stateMu             sync.RWMutex
+	closed              bool
+	pongTimeout         time.Duration
 }
 
 func NewClient(
@@ -54,20 +54,20 @@ func NewClient(
 	}
 
 	return &Client{
-		conn:            conn,
-		userID:          userID,
-		deviceID:        deviceID,
-		deviceUUID:      deviceUUID,
-		deviceName:      deviceName,
-		deviceType:      deviceType,
-		businessVersion: businessVersion,
-		wsVersion:       wsVersion,
+		conn:                conn,
+		userID:              userID,
+		deviceID:            deviceID,
+		deviceUUID:          deviceUUID,
+		deviceName:          deviceName,
+		deviceType:          deviceType,
+		businessVersion:     businessVersion,
+		wsVersion:           wsVersion,
 		advertisedWsVersion: advertisedWsVersion,
-		maxMessageBytes: maxMessageBytes,
-		send:            make(chan any, 32),
-		process:         process,
-		onDisconnect:    onDisconnect,
-		pongTimeout:     webSocketPongTimeout,
+		maxMessageBytes:     maxMessageBytes,
+		send:                make(chan any, 32),
+		process:             process,
+		onDisconnect:        onDisconnect,
+		pongTimeout:         webSocketPongTimeout,
 	}, nil
 }
 
@@ -129,6 +129,22 @@ func (c *Client) Send(message any) bool {
 	default:
 		c.stateMu.RUnlock()
 		c.Close()
+		return false
+	}
+}
+
+// TrySend enqueues a best-effort forwarded message without disconnecting a slow target.
+func (c *Client) TrySend(message any) bool {
+	c.stateMu.RLock()
+	defer c.stateMu.RUnlock()
+	if c.closed {
+		return false
+	}
+
+	select {
+	case c.send <- message:
+		return true
+	default:
 		return false
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -42,20 +43,22 @@ type pendingPush struct {
 }
 
 type WsService struct {
-	deviceRepo      *repository.DeviceRepository
-	ticketRepo      *repository.TicketRepository
-	hub             *ws.Hub
-	ticketTTL       time.Duration
-	ticketRateLimit int
-	ticketLimitMu   sync.Mutex
+	deviceRepo            *repository.DeviceRepository
+	ticketRepo            *repository.TicketRepository
+	hub                   *ws.Hub
+	ticketTTL             time.Duration
+	ticketRateLimit       int
+	ticketLimitMu         sync.Mutex
 	ticketLimitByDeviceID map[string][]time.Time
-	lastSeenMu      sync.Mutex
-	lastSeenByID    map[uuid.UUID]time.Time
-	pendingPushMu   sync.Mutex
-	pendingPushes   map[string]pendingPush
-	connectedAtMu   sync.Mutex
-	connectedAt     map[*ws.Client]time.Time
-	log             *zap.Logger
+	lastSeenMu            sync.Mutex
+	lastSeenByID          map[uuid.UUID]time.Time
+	pendingPushMu         sync.Mutex
+	pendingPushes         map[string]pendingPush
+	connectedAtMu         sync.Mutex
+	connectedAt           map[*ws.Client]time.Time
+	droppedRelays         atomic.Uint64
+	droppedBroadcasts     atomic.Uint64
+	log                   *zap.Logger
 }
 
 func NewWsService(
@@ -67,16 +70,16 @@ func NewWsService(
 	log *zap.Logger,
 ) *WsService {
 	return &WsService{
-		deviceRepo:      deviceRepo,
-		ticketRepo:      ticketRepo,
-		hub:             hub,
-		ticketTTL:       ticketTTL,
-		ticketRateLimit: ticketRateLimit,
+		deviceRepo:            deviceRepo,
+		ticketRepo:            ticketRepo,
+		hub:                   hub,
+		ticketTTL:             ticketTTL,
+		ticketRateLimit:       ticketRateLimit,
 		ticketLimitByDeviceID: make(map[string][]time.Time),
-		lastSeenByID:    make(map[uuid.UUID]time.Time),
-		pendingPushes:   make(map[string]pendingPush),
-		connectedAt:     make(map[*ws.Client]time.Time),
-		log:             log,
+		lastSeenByID:          make(map[uuid.UUID]time.Time),
+		pendingPushes:         make(map[string]pendingPush),
+		connectedAt:           make(map[*ws.Client]time.Time),
+		log:                   log,
 	}
 }
 
@@ -363,7 +366,7 @@ func (s *WsService) handleRelay(client *ws.Client, message ws.ClientMessage) {
 
 	from := client.DeviceID()
 	to := *message.To
-	if !s.hub.SendToDevice(client.UserID(), to, ws.MessageEnvelope{
+	result := s.hub.TrySendToDevice(client.UserID(), to, ws.MessageEnvelope{
 		ID:            message.ID,
 		Type:          "relay",
 		From:          &from,
@@ -371,8 +374,19 @@ func (s *WsService) handleRelay(client *ws.Client, message ws.ClientMessage) {
 		CorrelationID: message.CorrelationID,
 		Payload:       json.RawMessage(message.Payload),
 		Timestamp:     time.Now().UTC().UnixMilli(),
-	}) {
+	})
+	switch result {
+	case ws.TrySendOffline:
 		s.logger().Debug("websocket relay target offline", zap.String("from_device_id", shortID(from)), zap.String("to_device_id", shortID(to)), zap.Int("payload_bytes", len(message.Payload)))
+	case ws.TrySendQueueFull:
+		dropped := s.droppedRelays.Add(1)
+		s.logger().Warn(
+			"websocket relay dropped because target send queue is full",
+			zap.String("from_device_id", shortID(from)),
+			zap.String("to_device_id", shortID(to)),
+			zap.Int("payload_bytes", len(message.Payload)),
+			zap.Uint64("dropped_relay_total", dropped),
+		)
 	}
 }
 
@@ -383,7 +397,7 @@ func (s *WsService) handleBroadcast(client *ws.Client, message ws.ClientMessage)
 	}
 
 	from := client.DeviceID()
-	s.hub.Broadcast(client.UserID(), client.DeviceID(), ws.MessageEnvelope{
+	droppedTargets := s.hub.TryBroadcast(client.UserID(), client.DeviceID(), ws.MessageEnvelope{
 		ID:            message.ID,
 		Type:          "broadcast",
 		From:          &from,
@@ -392,6 +406,16 @@ func (s *WsService) handleBroadcast(client *ws.Client, message ws.ClientMessage)
 		Payload:       json.RawMessage(message.Payload),
 		Timestamp:     time.Now().UTC().UnixMilli(),
 	})
+	for _, to := range droppedTargets {
+		dropped := s.droppedBroadcasts.Add(1)
+		s.logger().Warn(
+			"websocket broadcast dropped because target send queue is full",
+			zap.String("from_device_id", shortID(from)),
+			zap.String("to_device_id", shortID(to)),
+			zap.Int("payload_bytes", len(message.Payload)),
+			zap.Uint64("dropped_broadcast_total", dropped),
+		)
+	}
 }
 
 func (s *WsService) LogUpgradeFailure(err error) {

@@ -2,6 +2,14 @@ package ws
 
 import "sync"
 
+type TrySendResult int
+
+const (
+	TrySendDelivered TrySendResult = iota
+	TrySendOffline
+	TrySendQueueFull
+)
+
 type Hub struct {
 	mu      sync.RWMutex
 	clients map[string]map[string]*Client
@@ -72,6 +80,33 @@ func (h *Hub) SendToDevice(userID string, deviceID string, message any) bool {
 	}
 
 	return client.Send(message)
+}
+
+func (h *Hub) TrySendToDevice(userID string, deviceID string, message any) TrySendResult {
+	client := h.ClientForDevice(userID, deviceID)
+	if client == nil {
+		return TrySendOffline
+	}
+	if !client.TrySend(message) {
+		return TrySendQueueFull
+	}
+	return TrySendDelivered
+}
+
+func (h *Hub) TryBroadcast(userID string, excludeDeviceID string, message any) []string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	var dropped []string
+	for deviceID, client := range h.clients[userID] {
+		if deviceID == excludeDeviceID {
+			continue
+		}
+		if !client.TrySend(message) {
+			dropped = append(dropped, deviceID)
+		}
+	}
+	return dropped
 }
 
 func (h *Hub) ClientForDevice(userID string, deviceID string) *Client {

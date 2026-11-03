@@ -11,6 +11,22 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+func TestTrySendDropsMessageWithoutClosingFullQueue(t *testing.T) {
+	client := &Client{send: make(chan any, 1)}
+	if !client.TrySend("first") {
+		t.Fatal("expected first message to be queued")
+	}
+	if client.TrySend("second") {
+		t.Fatal("expected second message to be dropped")
+	}
+	client.stateMu.RLock()
+	closed := client.closed
+	client.stateMu.RUnlock()
+	if closed {
+		t.Fatal("expected full best-effort queue to remain connected")
+	}
+}
+
 func TestReadPumpDisconnectsAfterPongTimeout(t *testing.T) {
 	disconnected := make(chan struct{})
 	connection, client, start := newReadPumpTestClient(t, 8*1024*1024, func(*Client) {
